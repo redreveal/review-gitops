@@ -37,7 +37,7 @@ jobs:
         MSAS=$(cat msa_numbers.txt)
         for MSA in $MSAS; do
           echo "Processing MSA $MSA"
-          DIRECTORY="argocd-gitops/dev/us-east-1"
+          DIRECTORY="argocd-gitops/review/dev/us-east-1"
           FILE="$DIRECTORY/$MSA.yaml"
         
           mkdir -p $DIRECTORY
