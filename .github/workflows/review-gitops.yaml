@@ -25,30 +25,36 @@ jobs:
       run: |
         grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
 
+    - name: Checkout ArgoCD-GitOps
+      uses: actions/checkout@v2
+      with:
+        repository: redreveal/argocd-gitops-versions
+        token: ${{ secrets.TOKEN }}
+        path: argocd-gitops
+
     - name: Create/Update YAML Files in ArgoCD-GitOps
       run: |
         MSAS=$(cat msa_numbers.txt)
         for MSA in $MSAS; do
           echo "Processing MSA $MSA"
-          # Create YAML content
+          DIRECTORY="argocd-gitops/dev/us-east-1"
+          FILE="$DIRECTORY/$MSA.yaml"
+        
+          mkdir -p $DIRECTORY
+        
           if [ "$MSA" == "91010000" ]; then
-            echo "default_all: 2024.7.29\nmsas:\n   91010000:\n          search: 2024.7.28" > argocd-gitops/dev/us-east-1/$MSA.yaml
+            echo "default_all: 2024.7.29\nmsas:\n   91010000:\n          search: 2024.7.28" > $FILE
           else
-            ln -s argocd-gitops/default.yaml argocd-gitops/dev/us-east-1/$MSA.yaml
+            ln -s argocd-gitops/default.yaml $FILE
           fi
         done
 
-    - name: Push to ArgoCD-GitOps
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/argocd-gitops-versions
-        token: ${{ secrets.TOKEN }}
-        path: review
 
     - name: Commit and Push
       run: |
-        cd review
+        cd argocd-gitops
         git add .
         git commit -m "Updated YAML files for new MSAs"
         git push
-
+      env:
+        GITHUB_TOKEN: ${{ secrets.PAT_GITHUB }}
