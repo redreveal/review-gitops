@@ -24,7 +24,7 @@ jobs:
       with:
         repository: redreveal/red-terraform
         token: ${{ secrets.TOKEN }}
-        ref: main
+        ref: "${{ steps.extract_payload.outputs.branch }}"
         path: terraform
 
     - name: Extract MSA Numbers
@@ -45,7 +45,7 @@ jobs:
         echo "Branch Name: $BRANCH_NAME"
         if [[ "$BRANCH_NAME" == "develop" ]]; then
           echo "dir=argocd-gitops/dev/us-east-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "staging" ]]; then
+        elif [[ "$BRANCH_NAME" == "uat" ]]; then
           echo "dir=argocd-gitops/uat/eu-west-1" >> $GITHUB_ENV
         elif [[ "$BRANCH_NAME" == "production" ]]; then
           echo "dir=argocd-gitops/prod/us-east-1" >> $GITHUB_ENV
@@ -67,10 +67,8 @@ jobs:
             exit 1
           fi
 
-          # Ensure the directory exists
           mkdir -p $DIRECTORY
 
-          # Check for MSA overrides in review-gitops
           if grep -q "$MSA" review-gitops/dev/us-east-1/versions.yaml; then
             OVERRIDE_VERSION=$(grep "$MSA" review-gitops/dev/us-east-1/versions.yaml | awk '{print $2}')
             echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
