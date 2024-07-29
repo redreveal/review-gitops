@@ -18,10 +18,11 @@ jobs:
       with:
         repository: redreveal/red-terraform
         ref: main
+        path: terraform
 
     - name: Extract MSA Numbers
       run: |
-        grep 'module.MSA' terraform/99_clients/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
+        grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
 
     - name: Create/Update YAML Files in ArgoCD-GitOps
       run: |
