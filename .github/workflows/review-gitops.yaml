@@ -52,11 +52,11 @@ jobs:
 
     - name: Commit and Push
       run: |
+        cd argocd-gitops
         git config user.email "rberisha@revealdata.com"
         git config user.name "Redon Berisha"
-        cd argocd-gitops
         git add .
         git commit -m "Updated YAML files for new MSAs"
         git push
       env:
-        TOKEN: ${{ secrets.TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
