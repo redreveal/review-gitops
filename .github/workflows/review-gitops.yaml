@@ -1,0 +1,51 @@
+name: Review-GitOps Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-argocd:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Review-GitOps
+      uses: actions/checkout@v2
+
+    - name: Checkout Terraform Repo
+      uses: actions/checkout@v2
+      with:
+        repository: redreveal/red-terraform
+        ref: main
+
+    - name: Extract MSA Numbers
+      run: |
+        grep 'module.MSA' terraform/99_clients/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
+
+    - name: Create/Update YAML Files in ArgoCD-GitOps
+      run: |
+        MSAS=$(cat msa_numbers.txt)
+        for MSA in $MSAS; do
+          echo "Processing MSA $MSA"
+          # Create YAML content
+          if [ "$MSA" == "91010000" ]; then
+            echo "default_all: 2024.7.29\nmsas:\n   91010000:\n          search: 2024.7.28" > argocd-gitops/dev/us-east-1/$MSA.yaml
+          else
+            ln -s argocd-gitops/default.yaml argocd-gitops/dev/us-east-1/$MSA.yaml
+          fi
+        done
+
+    - name: Push to ArgoCD-GitOps
+      uses: actions/checkout@v2
+      with:
+        repository: redreveal/argocd-gitops-versions
+        path: review
+
+    - name: Commit and Push
+      run: |
+        cd review
+        git add .
+        git commit -m "Updated YAML files for new MSAs"
+        git push
+
