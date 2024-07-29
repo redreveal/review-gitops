@@ -32,20 +32,47 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
+    - name: Determine Directory
+      id: determine-directory
+      run: |
+        BRANCH_NAME=$(git -C terraform rev-parse --abbrev-ref HEAD)
+        if [[ "$BRANCH_NAME" == "develop" ]]; then
+          echo "dir=argocd-gitops/dev/us-east-1" >> $GITHUB_ENV
+        elif [[ "$BRANCH_NAME" == "uat" ]]; then
+          echo "dir=argocd-gitops/uat/eu-west-1" >> $GITHUB_ENV
+        elif [[ "$BRANCH_NAME" == "prod" ]]; then
+          echo "dir=argocd-gitops/prod/us-east-1" >> $GITHUB_ENV
+          echo "dir2=argocd-gitops/prod/us-west-1" >> $GITHUB_ENV
+        fi
+
     - name: Create/Update YAML Files in ArgoCD-GitOps
       run: |
         MSAS=$(cat msa_numbers.txt)
         for MSA in $MSAS; do
           echo "Processing MSA $MSA"
-          DIRECTORY="argocd-gitops/review/dev/us-east-1"
+          DIRECTORY="${{ env.dir }}"
           FILE="$DIRECTORY/$MSA.yaml"
-        
+          
+          # Ensure the directory exists
           mkdir -p $DIRECTORY
-        
-          if [ "$MSA" == "91010000" ]; then
-            echo "default_all: 2024.7.29\nmsas:\n   91010000:\n          search: 2024.7.28" > $FILE
+
+          if grep -q "$MSA" review-gitops/dev/us-east-1/versions.yaml; then
+            OVERRIDE_VERSION=$(grep "$MSA" review-gitops/dev/us-east-1/versions.yaml | awk '{print $2}')
+            echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
           else
-            ln -s argocd-gitops/default.yaml $FILE
+            ln -sf argocd-gitops/default.yaml $FILE
+          fi
+
+          if [ -n "${{ env.dir2 }}" ]; then
+            DIRECTORY="${{ env.dir2 }}"
+            FILE="$DIRECTORY/$MSA.yaml"
+            mkdir -p $DIRECTORY
+            if grep -q "$MSA" review-gitops/dev/us-east-1/versions.yaml; then
+              OVERRIDE_VERSION=$(grep "$MSA" review-gitops/dev/us-east-1/versions.yaml | awk '{print $2}')
+              echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
+            else
+              ln -sf argocd-gitops/default.yaml $FILE
+            fi
           fi
         done
 
