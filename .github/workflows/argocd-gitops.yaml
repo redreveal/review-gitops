@@ -12,6 +12,10 @@ jobs:
     steps:
     - name: Checkout Review-GitOps
       uses: actions/checkout@v2
+      with:
+        repository: redreveal/review-gitops
+        token: ${{ secrets.TOKEN }}
+        path: review-gitops
 
     - name: Determine Environment and Branch
       id: determine-env
