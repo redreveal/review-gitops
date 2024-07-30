@@ -110,6 +110,25 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
+    - name: Ensure Versions File Exists in ArgoCD-GitOps
+      run: |
+        VERSIONS_DIR="argocd-gitops/review/${{ env.env }}/${{ env.region }}"
+        VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
+
+        echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
+
+        # Ensure the directory exists
+        mkdir -p $VERSIONS_DIR
+
+        # Create the versions.yaml file if it doesn't exist
+        if [ ! -f $VERSIONS_FILE ]; then
+          echo "default_all: 2024.7.29" > $VERSIONS_FILE
+        fi
+
+    - name: Sync Versions File to ArgoCD-GitOps
+      run: |
+        cp review-gitops/${{ env.env }}/${{ env.region }}/versions.yaml argocd-gitops/review/${{ env.env }}/${{ env.region }}/versions.yaml
+
     - name: Create/Update YAML Files in ArgoCD-GitOps
       run: |
         MSAS=$(cat msa_numbers.txt)
@@ -121,11 +140,6 @@ jobs:
 
           echo "Processing MSA $MSA in directory $DIRECTORY"
           echo "Checking for overrides in $VERSIONS_FILE"
-
-          if [ -z "$DIRECTORY" ]; then
-            echo "Error: DIRECTORY is not set"
-            exit 1
-          fi
 
           # Ensure the directory exists
           mkdir -p $DIRECTORY
