@@ -113,7 +113,7 @@ jobs:
           echo "Processing MSA $MSA"
           DIRECTORY="argocd-gitops/review/${{ env.env }}/${{ env.region }}"
           FILE="$DIRECTORY/$MSA.yaml"
-          VERSIONS_FILE="review-gitops/review/${{ env.env }}/${{ env.region }}/versions.yaml"
+          VERSIONS_FILE="review-gitops/${{ env.env }}/${{ env.region }}/versions.yaml"
 
           echo "Processing MSA $MSA in directory $DIRECTORY"
           echo "Checking for overrides in $VERSIONS_FILE"
