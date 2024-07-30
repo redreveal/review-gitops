@@ -67,7 +67,7 @@ jobs:
           mkdir -p $DIRECTORY
 
           if [ ! -L $FILE ] && [ ! -f $FILE ]; then
-            ln -sf ../../default.yaml $FILE
+            ln -sf ./versions.yaml $FILE
           fi
 
           if [ -n "${{ env.dir2 }}" ]; then

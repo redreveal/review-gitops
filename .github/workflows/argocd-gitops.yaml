@@ -160,7 +160,7 @@ jobs:
           else
             echo "No overrides found for MSA $MSA, ensuring symlink to versions.yaml"
             if [ ! -L $FILE ]; then
-              ln -sf ../../versions.yaml $FILE
+              ln -sf ./versions.yaml $FILE
             fi
           fi
         done
