@@ -55,7 +55,7 @@ jobs:
     - name: Checkout ArgoCD-GitOps Repo
       uses: actions/checkout@v2
       with:
-        repository: redreveal/red-argocd-gitops
+        repository: redreveal/argocd-gitops-versions
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
