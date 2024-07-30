@@ -1,9 +1,6 @@
 name: Review-GitOps Workflow
 
 on:
-  push:
-    branches:
-      - main
   repository_dispatch:
     types: [update-argocd]
 
@@ -45,7 +42,7 @@ jobs:
         echo "Branch Name: $BRANCH_NAME"
         if [[ "$BRANCH_NAME" == "develop" ]]; then
           echo "dir=argocd-gitops/dev/us-east-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "uat" ]]; then
+        elif [[ "$BRANCH_NAME" == "staging" ]]; then
           echo "dir=argocd-gitops/uat/eu-west-1" >> $GITHUB_ENV
         elif [[ "$BRANCH_NAME" == "production" ]]; then
           echo "dir=argocd-gitops/prod/us-east-1" >> $GITHUB_ENV
@@ -54,7 +51,7 @@ jobs:
         echo "Directory: ${{ env.dir }}"
         echo "Directory2: ${{ env.dir2 }}"
 
-    - name: Create/Update YAML Files in ArgoCD-GitOps
+    - name: Create Symlinks for New MSAs
       run: |
         MSAS=$(cat msa_numbers.txt)
         for MSA in $MSAS; do
@@ -69,22 +66,16 @@ jobs:
 
           mkdir -p $DIRECTORY
 
-          if grep -q "$MSA" review-gitops/dev/us-east-1/versions.yaml; then
-            OVERRIDE_VERSION=$(grep "$MSA" review-gitops/dev/us-east-1/versions.yaml | awk '{print $2}')
-            echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
-          else
-            ln -sf argocd-gitops/default.yaml $FILE
+          if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+            ln -sf ../../default.yaml $FILE
           fi
 
           if [ -n "${{ env.dir2 }}" ]; then
             DIRECTORY="${{ env.dir2 }}"
             FILE="$DIRECTORY/$MSA.yaml"
             mkdir -p $DIRECTORY
-            if grep -q "$MSA" review-gitops/dev/us-east-1/versions.yaml; then
-              OVERRIDE_VERSION=$(grep "$MSA" review-gitops/dev/us-east-1/versions.yaml | awk '{print $2}')
-              echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
-            else
-              ln -sf argocd-gitops/default.yaml $FILE
+            if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+              ln -sf ../../default.yaml $FILE
             fi
           fi
         done
@@ -96,7 +87,7 @@ jobs:
         git config user.email "rberisha@revealdata.com"
         git config user.name "Redon Berisha"
         git add .
-        git commit -m "Updated YAML files for new MSAs"
+        git commit -m "Added symlinks for new MSAs" || echo "No changes to commit"
         git push
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
