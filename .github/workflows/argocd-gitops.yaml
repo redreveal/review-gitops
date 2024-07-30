@@ -50,7 +50,7 @@ jobs:
 
     - name: Extract MSA Numbers
       run: |
-        grep 'module.MSA' terraform/99_clients/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
+        grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
 
     - name: Checkout ArgoCD-GitOps Repo
       uses: actions/checkout@v2
