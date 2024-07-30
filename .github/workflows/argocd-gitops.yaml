@@ -78,6 +78,9 @@ jobs:
           FILE="$DIRECTORY/$MSA.yaml"
           VERSIONS_FILE="review-gitops/review/${{ env.env }}/${{ env.region }}/versions.yaml"
 
+          echo "Processing MSA $MSA in directory $DIRECTORY"
+          echo "Checking for overrides in $VERSIONS_FILE"
+
           if [ -z "$DIRECTORY" ]; then
             echo "Error: DIRECTORY is not set"
             exit 1
@@ -92,7 +95,7 @@ jobs:
             echo "default_all: 2024.7.29" > $VERSIONS_FILE
           fi
 
-          echo "Checking for overrides in $VERSIONS_FILE"
+          # Check for MSA overrides in review-gitops
           OVERRIDES=$(yq e ".msas.$MSA" $VERSIONS_FILE)
           if [ "$OVERRIDES" != "null" ]; then
             echo "Overrides found for MSA $MSA: $OVERRIDES"
@@ -100,7 +103,7 @@ jobs:
             echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
           else
             echo "No overrides found for MSA $MSA, creating symlink to versions.yaml"
-            ln -sf versions.yaml $FILE
+            ln -sf ../../versions.yaml $FILE
           fi
         done
 
