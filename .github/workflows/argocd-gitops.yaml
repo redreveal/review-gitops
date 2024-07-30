@@ -141,10 +141,19 @@ jobs:
           if [ "$OVERRIDES" != "null" ] && [ "$OVERRIDES" != "" ]; then
             echo "Overrides found for MSA $MSA: $OVERRIDES"
             OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
+
+            # Check if the file is a symlink and remove it if it is
+            if [ -L $FILE ]; then
+              echo "Removing existing symlink $FILE"
+              rm $FILE
+            fi
+
             echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
           else
-            echo "No overrides found for MSA $MSA, creating symlink to versions.yaml"
-            ln -sf ../../versions.yaml $FILE
+            echo "No overrides found for MSA $MSA, ensuring symlink to versions.yaml"
+            if [ ! -L $FILE ]; then
+              ln -sf ../../versions.yaml $FILE
+            fi
           fi
         done
 
