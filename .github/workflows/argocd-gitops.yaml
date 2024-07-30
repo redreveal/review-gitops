@@ -64,8 +64,9 @@ jobs:
         MSAS=$(cat msa_numbers.txt)
         for MSA in $MSAS; do
           echo "Processing MSA $MSA"
-          DIRECTORY="argocd-gitops/${{ env.region }}"
+          DIRECTORY="argocd-gitops/review/${{ env.env }}/${{ env.region }}"
           FILE="$DIRECTORY/$MSA.yaml"
+          VERSIONS_FILE="review-gitops/review/${{ env.env }}/${{ env.region }}/versions.yaml"
 
           if [ -z "$DIRECTORY" ]; then
             echo "Error: DIRECTORY is not set"
@@ -76,8 +77,8 @@ jobs:
           mkdir -p $DIRECTORY
 
           # Create a default versions.yaml if it doesn't exist
-          VERSIONS_FILE="review-gitops/${{ env.region }}/versions.yaml"
           if [ ! -f $VERSIONS_FILE ]; then
+            mkdir -p $(dirname $VERSIONS_FILE)
             echo "default_all: 2024.7.29" > $VERSIONS_FILE
           fi
 
@@ -86,7 +87,7 @@ jobs:
             OVERRIDE_VERSION=$(grep "$MSA" $VERSIONS_FILE | awk '{print $2}')
             echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
           else
-            ln -sf ../../default.yaml $FILE
+            ln -sf versions.yaml $FILE
           fi
         done
 
