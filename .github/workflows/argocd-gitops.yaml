@@ -117,10 +117,8 @@ jobs:
 
         echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
 
-        # Ensure the directory exists
         mkdir -p $VERSIONS_DIR
 
-        # Create the versions.yaml file if it doesn't exist
         if [ ! -f $VERSIONS_FILE ]; then
           echo "default_all: 2024.7.29" > $VERSIONS_FILE
         fi
@@ -141,14 +139,11 @@ jobs:
           echo "Processing MSA $MSA in directory $DIRECTORY"
           echo "Checking for overrides in $VERSIONS_FILE"
 
-          # Ensure the directory exists
           mkdir -p $DIRECTORY
 
-          # Print the content of the versions.yaml file
           echo "Contents of $VERSIONS_FILE:"
           cat $VERSIONS_FILE
 
-          # Check for MSA overrides in review-gitops
           OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
           echo "Command: yq e \".msas.\"$MSA\"\" $VERSIONS_FILE"
           echo "Overrides for MSA $MSA: $OVERRIDES"
@@ -156,7 +151,6 @@ jobs:
             echo "Overrides found for MSA $MSA: $OVERRIDES"
             OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
 
-            # Check if the file is a symlink and remove it if it is
             if [ -L $FILE ]; then
               echo "Removing existing symlink $FILE"
               rm $FILE
