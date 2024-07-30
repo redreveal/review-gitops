@@ -92,11 +92,14 @@ jobs:
             echo "default_all: 2024.7.29" > $VERSIONS_FILE
           fi
 
-          # Check for MSA overrides in review-gitops
+          echo "Checking for overrides in $VERSIONS_FILE"
           OVERRIDES=$(yq e ".msas.$MSA" $VERSIONS_FILE)
           if [ "$OVERRIDES" != "null" ]; then
-            echo "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES" > $FILE
+            echo "Overrides found for MSA $MSA: $OVERRIDES"
+            OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
+            echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
           else
+            echo "No overrides found for MSA $MSA, creating symlink to versions.yaml"
             ln -sf versions.yaml $FILE
           fi
         done
