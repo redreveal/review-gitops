@@ -126,12 +126,6 @@ jobs:
           # Ensure the directory exists
           mkdir -p $DIRECTORY
 
-          # Create a default versions.yaml if it doesn't exist
-          if [ ! -f $VERSIONS_FILE ]; then
-            mkdir -p $(dirname $VERSIONS_FILE)
-            echo "default_all: 2024.7.29" > $VERSIONS_FILE
-          fi
-
           # Print the content of the versions.yaml file
           echo "Contents of $VERSIONS_FILE:"
           cat $VERSIONS_FILE
@@ -140,7 +134,7 @@ jobs:
           OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
           echo "Command: yq e \".msas.\"$MSA\"\" $VERSIONS_FILE"
           echo "Overrides for MSA $MSA: $OVERRIDES"
-          if [ "$OVERRIDES" != "null" ]; then
+          if [ "$OVERRIDES" != "null" ] && [ "$OVERRIDES" != "" ]; then
             echo "Overrides found for MSA $MSA: $OVERRIDES"
             OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
             echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
@@ -155,6 +149,7 @@ jobs:
         cd argocd-gitops
         git config user.email "rberisha@revealdata.com"
         git config user.name "Redon Berisha"
+        git add .
         git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
         git push
       env:
