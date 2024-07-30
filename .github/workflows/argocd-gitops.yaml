@@ -133,7 +133,7 @@ jobs:
           fi
 
           # Check for MSA overrides in review-gitops
-          OVERRIDES=$(yq e ".msas.$MSA" $VERSIONS_FILE)
+          OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
           if [ "$OVERRIDES" != "null" ]; then
             echo "Overrides found for MSA $MSA: $OVERRIDES"
             OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
