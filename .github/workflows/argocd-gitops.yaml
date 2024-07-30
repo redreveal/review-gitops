@@ -19,19 +19,24 @@ jobs:
         CHANGED_DIR=$(git diff --name-only HEAD~1 HEAD | grep -E 'dev/us-east-1|uat/eu-west-1|prod/us-east-1|prod/us-west-1' | head -1)
         echo "Changed Directory: $CHANGED_DIR"
         if [[ "$CHANGED_DIR" == dev/us-east-1* ]]; then
-          echo "region=dev/us-east-1" >> $GITHUB_ENV
+          echo "region=us-east-1" >> $GITHUB_ENV
+          echo "env=dev" >> $GITHUB_ENV
           echo "branch=develop" >> $GITHUB_ENV
         elif [[ "$CHANGED_DIR" == uat/eu-west-1* ]]; then
-          echo "region=uat/eu-west-1" >> $GITHUB_ENV
-          echo "branch=uat" >> $GITHUB_ENV
+          echo "region=eu-west-1" >> $GITHUB_ENV
+          echo "env=uat" >> $GITHUB_ENV
+          echo "branch=staging" >> $GITHUB_ENV
         elif [[ "$CHANGED_DIR" == prod/us-east-1* ]]; then
-          echo "region=prod/us-east-1" >> $GITHUB_ENV
+          echo "region=us-east-1" >> $GITHUB_ENV
+          echo "env=prod" >> $GITHUB_ENV
           echo "branch=production" >> $GITHUB_ENV
         elif [[ "$CHANGED_DIR" == prod/us-west-1* ]]; then
-          echo "region=prod/us-west-1" >> $GITHUB_ENV
+          echo "region=us-west-1" >> $GITHUB_ENV
+          echo "env=prod" >> $GITHUB_ENV
           echo "branch=production" >> $GITHUB_ENV
         fi
         echo "Region: ${{ env.region }}"
+        echo "Environment: ${{ env.env }}"
         echo "Branch: ${{ env.branch }}"
 
     - name: Checkout and Update Terraform Repo
@@ -51,6 +56,11 @@ jobs:
     - name: Extract MSA Numbers
       run: |
         grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
+
+    - name: Install yq
+      run: |
+        sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
+        sudo chmod +x /usr/bin/yq
 
     - name: Checkout ArgoCD-GitOps Repo
       uses: actions/checkout@v2
@@ -83,9 +93,9 @@ jobs:
           fi
 
           # Check for MSA overrides in review-gitops
-          if grep -q "$MSA" $VERSIONS_FILE; then
-            OVERRIDE_VERSION=$(grep "$MSA" $VERSIONS_FILE | awk '{print $2}')
-            echo "default_all: 2024.7.29\nmsas:\n   $MSA:\n          search: $OVERRIDE_VERSION" > $FILE
+          OVERRIDES=$(yq e ".msas.$MSA" $VERSIONS_FILE)
+          if [ "$OVERRIDES" != "null" ]; then
+            echo "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES" > $FILE
           else
             ln -sf versions.yaml $FILE
           fi
