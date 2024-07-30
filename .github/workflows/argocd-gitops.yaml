@@ -23,7 +23,7 @@ jobs:
           echo "branch=develop" >> $GITHUB_ENV
         elif [[ "$CHANGED_DIR" == uat/eu-west-1* ]]; then
           echo "region=uat/eu-west-1" >> $GITHUB_ENV
-          echo "branch=staging" >> $GITHUB_ENV
+          echo "branch=uat" >> $GITHUB_ENV
         elif [[ "$CHANGED_DIR" == prod/us-east-1* ]]; then
           echo "region=prod/us-east-1" >> $GITHUB_ENV
           echo "branch=production" >> $GITHUB_ENV

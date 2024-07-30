@@ -42,9 +42,9 @@ jobs:
         echo "Branch Name: $BRANCH_NAME"
         if [[ "$BRANCH_NAME" == "develop" ]]; then
           echo "dir=argocd-gitops/dev/us-east-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "staging" ]]; then
+        elif [[ "$BRANCH_NAME" == "uat" ]]; then
           echo "dir=argocd-gitops/uat/eu-west-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "production" ]]; then
+        elif [[ "$BRANCH_NAME" == "prod" ]]; then
           echo "dir=argocd-gitops/prod/us-east-1" >> $GITHUB_ENV
           echo "dir2=argocd-gitops/prod/us-west-1" >> $GITHUB_ENV
         fi
