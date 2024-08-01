@@ -68,16 +68,10 @@ jobs:
             }
           });
 
-          core.setOutput('regions_envs', JSON.stringify(regions_envs));
+          const fs = require('fs');
+          fs.writeFileSync('regions_envs.json', JSON.stringify(regions_envs));
+          core.setOutput('regions_envs', 'regions_envs.json');
           console.log(`Regions and Environments: ${JSON.stringify(regions_envs)}`);
-
-    - name: Set Environment Variables
-      run: |
-        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
-
-    - name: Debugging Print regions_envs
-      run: |
-        echo "regions_envs: ${{ env.regions_envs }}"
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
@@ -112,9 +106,7 @@ jobs:
 
     - name: Ensure and Sync Versions Files in ArgoCD-GitOps
       run: |
-        echo "Regions and Environments: ${{ env.regions_envs }}"
-        echo "${{ env.regions_envs }}" | jq .
-        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -148,15 +140,14 @@ jobs:
 
     - name: Run the Python script to generate values.yaml
       run: |
-        echo "Regions and Environments: ${{ env.regions_envs }}"
-        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          python process_versions.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+          python ./.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
     - name: Commit and Push
