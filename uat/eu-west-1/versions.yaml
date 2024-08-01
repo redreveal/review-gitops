@@ -5,14 +5,14 @@ defaults:
   review:
     default: 2024.7.19
     services:
-      search: 2024.7.24
+      search: 2024.7.25
       search_new: 2024.7.1
   reveal_ai:
     default: 2024.7.19
 msas:
-  91010000:
+  81010000:
     review:
       search: 2024.7.18
-  91010001:
+  81010001:
     review:
       search: 2024.7.12
