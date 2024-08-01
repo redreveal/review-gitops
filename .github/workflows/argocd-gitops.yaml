@@ -41,8 +41,9 @@ jobs:
             head: head
           });
           
-          let region, env, branch;
+          const regions_envs = [];
           compare.data.files.forEach(file => {
+            let region, env, branch;
             if (file.filename.startsWith('dev/us-east-1')) {
               region = 'us-east-1';
               env = 'dev';
@@ -60,25 +61,17 @@ jobs:
               env = 'prod';
               branch = 'production';
             }
+            if (region && env && branch) {
+              regions_envs.push({region, env, branch});
+            }
           });
 
-          if (!region || !env || !branch) {
-            throw new Error("No matching directory found in changed files.");
-          }
-
-          core.setOutput('region', region);
-          core.setOutput('env', env);
-          core.setOutput('branch', branch);
-          console.log(`Region: ${region}, Environment: ${env}, Branch: ${branch}`);
+          core.setOutput('regions_envs', JSON.stringify(regions_envs));
+          console.log(`Regions and Environments: ${JSON.stringify(regions_envs)}`);
 
     - name: Set Environment Variables
       run: |
-        echo "Region: ${{ steps.determine-env.outputs.region }}"
-        echo "Environment: ${{ steps.determine-env.outputs.env }}"
-        echo "Branch: ${{ steps.determine-env.outputs.branch }}"
-        echo "region=${{ steps.determine-env.outputs.region }}" >> $GITHUB_ENV
-        echo "env=${{ steps.determine-env.outputs.env }}" >> $GITHUB_ENV
-        echo "branch=${{ steps.determine-env.outputs.branch }}" >> $GITHUB_ENV
+        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
@@ -110,59 +103,50 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
-    - name: Ensure Versions File Exists in ArgoCD-GitOps
+    - name: Ensure and Sync Versions Files in ArgoCD-GitOps
       run: |
-        VERSIONS_DIR="argocd-gitops/review/${{ env.env }}/${{ env.region }}"
-        VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
+        regions_envs=$(echo $regions_envs | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
 
-        echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
+          VERSIONS_DIR="argocd-gitops/review/${ENV}/${REGION}"
+          VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
 
-        mkdir -p $VERSIONS_DIR
+          echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
 
-        if [ ! -f $VERSIONS_FILE ]; then
-          echo "default_all: 2024.7.29" > $VERSIONS_FILE
-        fi
+          mkdir -p $VERSIONS_DIR
 
-    - name: Sync Versions File to ArgoCD-GitOps
-      run: |
-        cp review-gitops/${{ env.env }}/${{ env.region }}/versions.yaml argocd-gitops/review/${{ env.env }}/${{ env.region }}/versions.yaml
-
-    - name: Create/Update YAML Files in ArgoCD-GitOps
-      run: |
-        MSAS=$(cat msa_numbers.txt)
-        for MSA in $MSAS; do
-          echo "Processing MSA $MSA"
-          DIRECTORY="argocd-gitops/review/${{ env.env }}/${{ env.region }}"
-          FILE="$DIRECTORY/$MSA.yaml"
-          VERSIONS_FILE="review-gitops/${{ env.env }}/${{ env.region }}/versions.yaml"
-
-          echo "Processing MSA $MSA in directory $DIRECTORY"
-          echo "Checking for overrides in $VERSIONS_FILE"
-
-          mkdir -p $DIRECTORY
-
-          echo "Contents of $VERSIONS_FILE:"
-          cat $VERSIONS_FILE
-
-          OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
-          echo "Command: yq e \".msas.\"$MSA\"\" $VERSIONS_FILE"
-          echo "Overrides for MSA $MSA: $OVERRIDES"
-          if [ "$OVERRIDES" != "null" ] && [ "$OVERRIDES" != "" ]; then
-            echo "Overrides found for MSA $MSA: $OVERRIDES"
-            OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
-
-            if [ -L $FILE ]; then
-              echo "Removing existing symlink $FILE"
-              rm $FILE
-            fi
-
-            echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
-          else
-            echo "No overrides found for MSA $MSA, ensuring symlink to versions.yaml"
-            if [ ! -L $FILE ]; then
-              ln -sf ./versions.yaml $FILE
-            fi
+          if [ ! -f $VERSIONS_FILE ]; then
+            echo "default_all: 2024.7.29" > $VERSIONS_FILE
           fi
+
+          cp review-gitops/${ENV}/${REGION}/versions.yaml $VERSIONS_FILE
+        done
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml
+
+    - name: Run the Python script to generate values.yaml
+      run: |
+        regions_envs=$(echo $regions_envs | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          python ./.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
     - name: Commit and Push
