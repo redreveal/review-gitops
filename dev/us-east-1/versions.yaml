@@ -5,7 +5,7 @@ defaults:
   review:
     default: 2024.7.19
     services:
-      search: 2024.7.23
+      search: 2024.7.24
       search_new: 2024.7.1
   reveal_ai:
     default: 2024.7.19
