@@ -71,7 +71,7 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
+        echo "regions_envs='${{ steps.determine-env.outputs.regions_envs }}'" >> $GITHUB_ENV
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
@@ -91,10 +91,11 @@ jobs:
       run: |
         grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
 
-    - name: Install yq
+    - name: Install yq and jq
       run: |
         sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
         sudo chmod +x /usr/bin/yq
+        sudo apt-get install -y jq
 
     - name: Checkout ArgoCD-GitOps Repo
       uses: actions/checkout@v2
@@ -146,7 +147,7 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          python ./.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+          python process_versions.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
     - name: Commit and Push
