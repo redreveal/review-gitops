@@ -73,8 +73,7 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        regions_envs=${{ steps.determine-env.outputs.regions_envs }}
-        echo "regions_envs=$(echo $regions_envs | jq -c)" >> $GITHUB_ENV
+        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
 
     - name: Debugging Print regions_envs
       run: |
