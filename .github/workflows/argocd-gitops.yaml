@@ -147,7 +147,7 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          python .github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
     - name: Commit and Push
