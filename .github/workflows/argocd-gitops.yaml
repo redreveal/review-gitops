@@ -73,7 +73,7 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
+        echo "regions_envs=\"${{ steps.determine-env.outputs.regions_envs }}\"" >> $GITHUB_ENV
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
