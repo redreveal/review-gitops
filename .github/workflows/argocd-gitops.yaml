@@ -73,7 +73,11 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        echo "regions_envs=\"${{ steps.determine-env.outputs.regions_envs }}\"" >> $GITHUB_ENV
+        echo "regions_envs='\"${{ steps.determine-env.outputs.regions_envs }}\"'" >> $GITHUB_ENV
+
+    - name: Debugging Print regions_envs
+      run: |
+        echo "regions_envs: ${{ env.regions_envs }}"
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
@@ -109,7 +113,6 @@ jobs:
     - name: Ensure and Sync Versions Files in ArgoCD-GitOps
       run: |
         echo "Regions and Environments: ${{ env.regions_envs }}"
-        echo "${{ env.regions_envs }}" | jq .
         regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
