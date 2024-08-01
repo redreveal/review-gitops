@@ -25,7 +25,7 @@ jobs:
           const payload = context.payload;
           const repo = context.repo;
           let base, head;
-          
+
           if (payload.pull_request) {
             base = payload.pull_request.base.sha;
             head = payload.pull_request.head.sha;
@@ -33,14 +33,14 @@ jobs:
             base = payload.before;
             head = payload.after;
           }
-          
+
           const compare = await github.rest.repos.compareCommits({
             owner: repo.owner,
             repo: repo.repo,
             base: base,
             head: head
           });
-          
+
           const regions_envs = [];
           console.log('Files changed:');
           compare.data.files.forEach(file => {
@@ -73,7 +73,7 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        echo "regions_envs=${{ steps.determine-env.outputs.regions_envs }}" >> $GITHUB_ENV
+        echo "regions_envs='${{ steps.determine-env.outputs.regions_envs }}'" >> $GITHUB_ENV
 
     - name: Checkout and Update Terraform Repo
       uses: actions/checkout@v2
@@ -109,7 +109,7 @@ jobs:
     - name: Ensure and Sync Versions Files in ArgoCD-GitOps
       run: |
         echo "Regions and Environments: ${{ env.regions_envs }}"
-        regions_envs=$(echo '${{ env.regions_envs }}' | jq -r '.[] | @base64')
+        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -144,7 +144,7 @@ jobs:
     - name: Run the Python script to generate values.yaml
       run: |
         echo "Regions and Environments: ${{ env.regions_envs }}"
-        regions_envs=$(echo '${{ env.regions_envs }}' | jq -r '.[] | @base64')
+        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
