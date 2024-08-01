@@ -73,7 +73,7 @@ jobs:
       run: |
         echo "regions_envs='${{ steps.determine-env.outputs.regions_envs }}'" >> $GITHUB_ENV
 
-    - name: Debugging: Print regions_envs
+    - name: Debugging Print regions_envs
       run: |
         echo "regions_envs: ${{ env.regions_envs }}"
 
