@@ -73,10 +73,9 @@ jobs:
 
     - name: Set Environment Variables
       run: |
-        regions_envs="${{ steps.determine-env.outputs.regions_envs }}"
-        echo "regions_envs=${regions_envs}" >> $GITHUB_ENV
+        echo "regions_envs=$(jq -c '.' <<< '${{ steps.determine-env.outputs.regions_envs }}')" >> $GITHUB_ENV
 
-    - name: Debugging Print regions_envs
+    - name: Debugging: Print regions_envs
       run: |
         echo "regions_envs: ${{ env.regions_envs }}"
 
@@ -115,8 +114,7 @@ jobs:
       run: |
         echo "Regions and Environments: ${{ env.regions_envs }}"
         echo "${{ env.regions_envs }}" | jq .
-        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
+        echo "${{ env.regions_envs }}" | jq -c '.' | jq -r '.[] | @base64' | while read region_env; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
           }
@@ -150,8 +148,7 @@ jobs:
     - name: Run the Python script to generate values.yaml
       run: |
         echo "Regions and Environments: ${{ env.regions_envs }}"
-        regions_envs=$(echo "${{ env.regions_envs }}" | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
+        echo "${{ env.regions_envs }}" | jq -c '.' | jq -r '.[] | @base64' | while read region_env; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
           }
