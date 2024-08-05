@@ -73,29 +73,40 @@ jobs:
           core.setOutput('regions_envs', 'regions_envs.json');
           console.log(`Regions and Environments: ${JSON.stringify(regions_envs)}`);
 
-    - name: Checkout and Update Terraform Repo
+    - name: Checkout Terraform Repo
       uses: actions/checkout@v2
       with:
         repository: redreveal/red-terraform
         token: ${{ secrets.TOKEN }}
         path: terraform
 
-    - name: Update Terraform Repo to Latest
-      run: |
-        cd terraform
-        git fetch origin
-        git checkout ${{ env.branch }}
-        git pull origin ${{ env.branch }}
-
-    - name: Extract MSA Numbers
-      run: |
-        grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
-
     - name: Install yq and jq
       run: |
         sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
         sudo chmod +x /usr/bin/yq
         sudo apt-get install -y jq
+
+    - name: Extract MSA Numbers for Each Environment
+      run: |
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          BRANCH=$(_jq '.branch')
+
+          echo "Checking out branch $BRANCH for $ENV/$REGION"
+          cd terraform
+          git fetch origin
+          git checkout $BRANCH
+          git pull origin $BRANCH
+
+          echo "Extracting MSA numbers for $ENV/$REGION from branch $BRANCH"
+          grep 'module.MSA' main.tf | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
+          cd ..
+        done
 
     - name: Checkout ArgoCD-GitOps Repo
       uses: actions/checkout@v2
@@ -148,6 +159,49 @@ jobs:
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
           python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+        done
+
+    - name: Handle Overrides and Symlinks
+      run: |
+        MSAS=$(cat msa_numbers_*.txt | sort -u)
+        for MSA in $MSAS; do
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+
+            DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
+            FILE="$DIRECTORY/$MSA.yaml"
+            VERSIONS_FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
+
+            echo "Processing MSA $MSA in directory $DIRECTORY"
+            echo "Checking for overrides in $VERSIONS_FILE"
+
+            mkdir -p $DIRECTORY
+
+            OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
+            echo "Command: yq e \".msas.\"$MSA\"\" $VERSIONS_FILE"
+            echo "Overrides for MSA $MSA: $OVERRIDES"
+            if [ "$OVERRIDES" != "null" ] && [ "$OVERRIDES" != "" ]; then
+              echo "Overrides found for MSA $MSA: $OVERRIDES"
+              OVERRIDES_FORMATTED=$(echo "$OVERRIDES" | sed 's/^/    /')
+
+              if [ -L $FILE ]; then
+                echo "Removing existing symlink $FILE"
+                rm $FILE
+              fi
+
+              echo -e "default_all: 2024.7.29\nmsas:\n  $MSA:\n$OVERRIDES_FORMATTED" > $FILE
+            else
+              echo "No overrides found for MSA $MSA, ensuring symlink to versions.yaml"
+              if [ ! -L $FILE ]; then
+                ln -sf ./versions.yaml $FILE
+              fi
+            fi
+          done
         done
 
     - name: Commit and Push
