@@ -29,13 +29,13 @@ jobs:
         BRANCH_NAME="${{ steps.extract_payload.outputs.branch }}"
         echo "Branch Name: $BRANCH_NAME"
         if [[ "$BRANCH_NAME" == "develop" ]]; then
-          DIRECTORY="argocd-gitops/dev/us-east-1"
+          DIRECTORY="argocd-gitops/review/dev/us-east-1"
           MAIN_TF="dev/us-east-1/99_clients/main.tf"
-        elif [[ "$BRANCH_NAME" == "uat" ]]; then
-          DIRECTORY="argocd-gitops/uat/eu-west-1"
+        elif [[ "$BRANCH_NAME" == "staging" ]]; then
+          DIRECTORY="argocd-gitops/review/uat/eu-west-1"
           MAIN_TF="uat/eu-west-1/99_clients/main.tf"
         elif [[ "$BRANCH_NAME" == "production" ]]; then
-          DIRECTORY="argocd-gitops/prod"
+          DIRECTORY_PATTERN="argocd-gitops/review/prod/*"
           MAIN_TF_PATTERN="prod/*/99_clients/main.tf"
         fi
 
@@ -44,9 +44,8 @@ jobs:
         elif [[ -n "$MAIN_TF_PATTERN" ]]; then
           for MAIN_TF in $(find terraform -path "terraform/$MAIN_TF_PATTERN"); do
             REGION=$(echo $MAIN_TF | awk -F'/' '{print $2}')
-            grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u >> msa_numbers.txt
+            grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u >> msa_numbers_${REGION}.txt
           done
-          sort -u msa_numbers.txt -o msa_numbers.txt
         fi
 
         echo "Directory: $DIRECTORY"
@@ -61,23 +60,29 @@ jobs:
 
     - name: Create Symlinks for New MSAs
       run: |
-        MSAS=$(cat msa_numbers.txt)
-        for MSA in $MSAS; do
-          echo "Processing MSA $MSA"
-          if [[ -d "$DIRECTORY" ]]; then
+        if [[ -f msa_numbers.txt ]]; then
+          MSAS=$(cat msa_numbers.txt)
+          for MSA in $MSAS; do
+            echo "Processing MSA $MSA"
+            DIRECTORY="${{ env.DIRECTORY }}"
             FILE="$DIRECTORY/$MSA.yaml"
             if [ ! -L $FILE ] && [ ! -f $FILE ]; then
               ln -sf ./default_values.yaml $FILE
             fi
-          else
-            for SUBDIR in $(find $DIRECTORY -type d -name '[a-z]*'); do
-              FILE="$SUBDIR/$MSA.yaml"
+          done
+        else
+          for REGION in $(find terraform/prod -maxdepth 1 -mindepth 1 -type d -exec basename {} \;); do
+            MSAS=$(cat msa_numbers_${REGION}.txt)
+            for MSA in $MSAS; do
+              echo "Processing MSA $MSA for region $REGION"
+              DIRECTORY="argocd-gitops/review/prod/$REGION"
+              FILE="$DIRECTORY/$MSA.yaml"
               if [ ! -L $FILE ] && [ ! -f $FILE ]; then
                 ln -sf ./default_values.yaml $FILE
               fi
             done
-          fi
-        done
+          done
+        fi
 
     - name: Commit and Push
       run: |
