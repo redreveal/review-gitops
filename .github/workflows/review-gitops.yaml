@@ -70,6 +70,7 @@ jobs:
             echo "Processing MSA $MSA"
             DIRECTORY="${{ env.DIRECTORY }}"
             FILE="$DIRECTORY/$MSA.yaml"
+            mkdir -p $DIRECTORY
             if [ ! -L $FILE ] && [ ! -f $FILE ]; then
               ln -sf ./default_values.yaml $FILE
             fi
@@ -81,6 +82,7 @@ jobs:
               echo "Processing MSA $MSA for region $REGION"
               DIRECTORY="argocd-gitops/review/prod/$REGION"
               FILE="$DIRECTORY/$MSA.yaml"
+              mkdir -p $DIRECTORY
               if [ ! -L $FILE ] && [ ! -f $FILE ]; then
                 ln -sf ./default_values.yaml $FILE
               fi
