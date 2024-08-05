@@ -53,7 +53,7 @@ jobs:
             } else if (file.filename.startsWith('uat/eu-west-1')) {
               region = 'eu-west-1';
               env = 'uat';
-              branch = 'staging';
+              branch = 'uat';
             } else if (file.filename.startsWith('prod/us-east-1')) {
               region = 'us-east-1';
               env = 'prod';
