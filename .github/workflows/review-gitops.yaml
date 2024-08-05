@@ -49,3 +49,43 @@ jobs:
           sort -u msa_numbers.txt -o msa_numbers.txt
         fi
 
+        echo "Directory: $DIRECTORY"
+        cat msa_numbers.txt
+
+    - name: Checkout ArgoCD-GitOps
+      uses: actions/checkout@v2
+      with:
+        repository: redreveal/argocd-gitops-versions
+        token: ${{ secrets.TOKEN }}
+        path: argocd-gitops
+
+    - name: Create Symlinks for New MSAs
+      run: |
+        MSAS=$(cat msa_numbers.txt)
+        for MSA in $MSAS; do
+          echo "Processing MSA $MSA"
+          if [[ -d "$DIRECTORY" ]]; then
+            FILE="$DIRECTORY/$MSA.yaml"
+            if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+              ln -sf ./default_values.yaml $FILE
+            fi
+          else
+            for SUBDIR in $(find $DIRECTORY -type d -name '[a-z]*'); do
+              FILE="$SUBDIR/$MSA.yaml"
+              if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+                ln -sf ./default_values.yaml $FILE
+              fi
+            done
+          fi
+        done
+
+    - name: Commit and Push
+      run: |
+        cd argocd-gitops
+        git config user.email "rberisha@revealdata.com"
+        git config user.name "Redon Berisha"
+        git add .
+        git commit -m "Added symlinks for new MSAs" || echo "No changes to commit"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
