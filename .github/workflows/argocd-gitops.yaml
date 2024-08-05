@@ -103,8 +103,16 @@ jobs:
           git checkout $BRANCH
           git pull origin $BRANCH
 
-          echo "Extracting MSA numbers for $ENV/$REGION from branch $BRANCH"
-          grep 'module.MSA' main.tf | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
+          if [[ "$ENV" == "dev" ]]; then
+            MAIN_TF="dev/us-east-1/99_clients/main.tf"
+          elif [[ "$ENV" == "uat" ]]; then
+            MAIN_TF="uat/eu-west-1/99_clients/main.tf"
+          elif [[ "$ENV" == "prod" ]]; then
+            MAIN_TF="prod/$REGION/99_clients/main.tf"
+          fi
+
+          echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
+          grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
           cd ..
         done
 

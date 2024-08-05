@@ -24,70 +24,28 @@ jobs:
         ref: "${{ steps.extract_payload.outputs.branch }}"
         path: terraform
 
-    - name: Extract MSA Numbers
-      run: |
-        grep 'module.MSA' terraform/main.tf | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
-
-    - name: Checkout ArgoCD-GitOps
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/argocd-gitops-versions
-        token: ${{ secrets.TOKEN }}
-        path: argocd-gitops
-
-    - name: Determine Directory
-      id: determine-directory
+    - name: Determine Directory and Extract MSA Numbers
       run: |
         BRANCH_NAME="${{ steps.extract_payload.outputs.branch }}"
         echo "Branch Name: $BRANCH_NAME"
         if [[ "$BRANCH_NAME" == "develop" ]]; then
-          echo "dir=argocd-gitops/dev/us-east-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "uat" ]]; then
-          echo "dir=argocd-gitops/uat/eu-west-1" >> $GITHUB_ENV
-        elif [[ "$BRANCH_NAME" == "prod" ]]; then
-          echo "dir=argocd-gitops/prod/us-east-1" >> $GITHUB_ENV
-          echo "dir2=argocd-gitops/prod/us-west-1" >> $GITHUB_ENV
+          DIRECTORY="argocd-gitops/dev/us-east-1"
+          MAIN_TF="dev/us-east-1/99_clients/main.tf"
+        elif [[ "$BRANCH_NAME" == "staging" ]]; then
+          DIRECTORY="argocd-gitops/uat/eu-west-1"
+          MAIN_TF="uat/eu-west-1/99_clients/main.tf"
+        elif [[ "$BRANCH_NAME" == "production" ]]; then
+          DIRECTORY="argocd-gitops/prod"
+          MAIN_TF_PATTERN="prod/*/99_clients/main.tf"
         fi
-        echo "Directory: ${{ env.dir }}"
-        echo "Directory2: ${{ env.dir2 }}"
 
-    - name: Create Symlinks for New MSAs
-      run: |
-        MSAS=$(cat msa_numbers.txt)
-        for MSA in $MSAS; do
-          echo "Processing MSA $MSA"
-          DIRECTORY="${{ env.dir }}"
-          FILE="$DIRECTORY/$MSA.yaml"
+        if [[ -n "$MAIN_TF" ]]; then
+          grep 'module.MSA' terraform/$MAIN_TF | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
+        elif [[ -n "$MAIN_TF_PATTERN" ]]; then
+          for MAIN_TF in $(find terraform -path "terraform/$MAIN_TF_PATTERN"); do
+            REGION=$(echo $MAIN_TF | awk -F'/' '{print $2}')
+            grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u >> msa_numbers.txt
+          done
+          sort -u msa_numbers.txt -o msa_numbers.txt
+        fi
 
-          if [ -z "$DIRECTORY" ]; then
-            echo "Error: DIRECTORY is not set"
-            exit 1
-          fi
-
-          mkdir -p $DIRECTORY
-
-          if [ ! -L $FILE ] && [ ! -f $FILE ]; then
-            ln -sf ./versions.yaml $FILE
-          fi
-
-          if [ -n "${{ env.dir2 }}" ]; then
-            DIRECTORY="${{ env.dir2 }}"
-            FILE="$DIRECTORY/$MSA.yaml"
-            mkdir -p $DIRECTORY
-            if [ ! -L $FILE ] && [ ! -f $FILE ]; then
-              ln -sf ../../default.yaml $FILE
-            fi
-          fi
-        done
-
-
-    - name: Commit and Push
-      run: |
-        cd argocd-gitops
-        git config user.email "rberisha@revealdata.com"
-        git config user.name "Redon Berisha"
-        git add .
-        git commit -m "Added symlinks for new MSAs" || echo "No changes to commit"
-        git push
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
