@@ -171,16 +171,16 @@ jobs:
 
     - name: Handle Overrides and Symlinks
       run: |
-        MSAS=$(cat msa_numbers_*.txt | sort -u)
-        for MSA in $MSAS; do
-          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-          for region_env in $regions_envs; do
-            _jq() {
-              echo ${region_env} | base64 --decode | jq -r ${1}
-            }
-            REGION=$(_jq '.region')
-            ENV=$(_jq '.env')
-
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          
+          MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+          for MSA in $MSAS; do
             DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
             FILE="$DIRECTORY/$MSA.yaml"
             VERSIONS_FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
@@ -204,7 +204,7 @@ jobs:
 
               echo -e "services:\n  search:\n    tag: $OVERRIDES" > $FILE
             else
-              echo "No overrides found for MSA $MSA, ensuring symlink to versions.yaml"
+              echo "No overrides found for MSA $MSA, ensuring symlink to default_values.yaml"
               if [ ! -L $FILE ]; then
                 ln -sf ./default_values.yaml $FILE
               fi
