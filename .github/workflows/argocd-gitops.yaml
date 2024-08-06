@@ -46,22 +46,18 @@ jobs:
           compare.data.files.forEach(file => {
             console.log(file.filename);
             let region, env, branch;
-            if (file.filename.startsWith('dev/us-east-1')) {
-              region = 'us-east-1';
+            if (file.filename.startsWith('dev/')) {
               env = 'dev';
               branch = 'develop';
-            } else if (file.filename.startsWith('uat/eu-west-1')) {
-              region = 'eu-west-1';
+              region = file.filename.split('/')[1];
+            } else if (file.filename.startsWith('uat/')) {
               env = 'uat';
               branch = 'uat';
-            } else if (file.filename.startsWith('prod/us-east-1')) {
-              region = 'us-east-1';
+              region = file.filename.split('/')[1];
+            } else if (file.filename.startsWith('prod/')) {
               env = 'prod';
               branch = 'production';
-            } else if (file.filename.startsWith('prod/us-west-1')) {
-              region = 'us-west-1';
-              env = 'prod';
-              branch = 'production';
+              region = file.filename.split('/')[1];
             }
             if (region && env && branch) {
               regions_envs.push({region, env, branch});
@@ -104,9 +100,9 @@ jobs:
           git pull origin $BRANCH
 
           if [[ "$ENV" == "dev" ]]; then
-            MAIN_TF="dev/us-east-1/99_clients/main.tf"
+            MAIN_TF="dev/$REGION/99_clients/main.tf"
           elif [[ "$ENV" == "uat" ]]; then
-            MAIN_TF="uat/eu-west-1/99_clients/main.tf"
+            MAIN_TF="uat/$REGION/99_clients/main.tf"
           elif [[ "$ENV" == "prod" ]]; then
             MAIN_TF="prod/$REGION/99_clients/main.tf"
           fi
