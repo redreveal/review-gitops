@@ -55,25 +55,17 @@ def process_versions(version_file_path, output_dir):
             values['services'][service] = {'tag': version}
 
         # Apply MSA-specific overrides
+        overridden = False
         for component, component_data in msa_data.items():
             for service, version in component_data.items():
                 if component == 'review' and service in values['services']:
                     values['services'][service]['tag'] = version
+                    overridden = True
 
         msa_str = str(msa)
-        msa_output_dir = os.path.join(output_dir, msa_str)
-        os.makedirs(msa_output_dir, exist_ok=True)
-        output_file_path = os.path.join(msa_output_dir, 'values.yaml')
+        output_file_path = os.path.join(output_dir, f'{msa_str}.yaml')
         write_yaml(values, output_file_path)
         print(f"Generated {output_file_path}")
-
-        # Create symlink to default_values.yaml if no overrides
-        if msa_data == {}:
-            symlink_path = os.path.join(msa_output_dir, 'values.yaml')
-            if os.path.exists(symlink_path):
-                os.remove(symlink_path)
-            os.symlink(default_values_path, symlink_path)
-            print(f"Created symlink for {msa_str} to default_values.yaml")
 
 if __name__ == "__main__":
     for i in range(1, len(sys.argv), 2):
