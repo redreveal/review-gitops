@@ -8,7 +8,7 @@ def read_yaml(file_path):
 
 def write_yaml(data, file_path):
     with open(file_path, 'w') as file:
-        yaml.dump(data, file, default_flow_style=False)
+        yaml.dump(data, file, default_flow_style=False, sort_keys=False)
 
 def process_versions(version_file_path, output_dir):
     versions_data = read_yaml(version_file_path)
@@ -56,9 +56,10 @@ def process_versions(version_file_path, output_dir):
         # Apply MSA-specific overrides
         if msa_data:
             for component, component_data in msa_data.items():
-                for service, version in component_data.items():
-                    if component == 'review' and service in values['services']:
-                        values['services'][service]['tag'] = version
+                if component == 'review':
+                    for service, version in component_data.items():
+                        if service in values['services']:
+                            values['services'][service]['tag'] = version
 
             msa_str = str(msa)
             output_file_path = os.path.join(output_dir, f'{msa_str}.yaml')
