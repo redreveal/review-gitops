@@ -138,7 +138,9 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+          OUTPUT_DIR="argocd-gitops/review/${ENV}/${REGION}"
+          mkdir -p $OUTPUT_DIR
+          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml $OUTPUT_DIR
         done
 
     - name: Handle Overrides and Symlinks

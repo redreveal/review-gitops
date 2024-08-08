@@ -35,8 +35,9 @@ def process_versions(version_file_path, output_dir):
 
     # Write the default values.yaml
     default_values_path = os.path.join(output_dir, 'default_values.yaml')
-    write_yaml(default_values, default_values_path)
-    print(f"Generated {default_values_path}")
+    if not os.path.exists(default_values_path):
+        write_yaml(default_values, default_values_path)
+        print(f"Generated {default_values_path}")
 
     # Process each MSA
     msas = versions_data.get('msas', {})
