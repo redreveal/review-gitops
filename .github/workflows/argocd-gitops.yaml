@@ -119,6 +119,30 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
+    - name: Ensure and Sync Versions Files in ArgoCD-GitOps
+      run: |
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+
+          VERSIONS_DIR="argocd-gitops/review/${ENV}/${REGION}"
+          VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
+
+          echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
+
+          mkdir -p $VERSIONS_DIR
+
+          if [ ! -f $VERSIONS_FILE ]; then
+            echo "default_all: 2024.7.29" > $VERSIONS_FILE
+          fi
+
+          cp review-gitops/${ENV}/${REGION}/versions.yaml $VERSIONS_FILE
+        done
+
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
@@ -138,9 +162,7 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          OUTPUT_DIR="argocd-gitops/review/${ENV}/${REGION}"
-          mkdir -p $OUTPUT_DIR
-          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml $OUTPUT_DIR
+          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
     - name: Handle Overrides and Symlinks
@@ -152,7 +174,7 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-
+          
           MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
           for MSA in $MSAS; do
             DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
@@ -161,6 +183,8 @@ jobs:
 
             echo "Processing MSA $MSA in directory $DIRECTORY"
             echo "Checking for overrides in $VERSIONS_FILE"
+
+            mkdir -p $DIRECTORY
 
             OVERRIDES=$(yq e ".msas.\"$MSA\"" $VERSIONS_FILE)
             echo "Command: yq e \".msas.\"$MSA\"\" $VERSIONS_FILE"
