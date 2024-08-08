@@ -55,12 +55,10 @@ def process_versions(version_file_path, output_dir):
             values['services'][service] = {'tag': version}
 
         # Apply MSA-specific overrides
-        overridden = False
         for component, component_data in msa_data.items():
             for service, version in component_data.items():
-                if component == 'review' and service in values['services']:
+                if component in values['services']:
                     values['services'][service]['tag'] = version
-                    overridden = True
 
         msa_str = str(msa)
         output_file_path = os.path.join(output_dir, f'{msa_str}.yaml')
