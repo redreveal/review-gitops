@@ -8,7 +8,7 @@ def read_yaml(file_path):
 
 def write_yaml(data, file_path):
     with open(file_path, 'w') as file:
-        yaml.dump(data, file, default_flow_style=False, sort_keys=False)
+        yaml.dump(data, file, default_flow_style=False)
 
 def process_versions(version_file_path, output_dir):
     versions_data = read_yaml(version_file_path)
