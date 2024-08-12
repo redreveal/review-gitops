@@ -42,23 +42,17 @@ def process_versions(version_file_path, output_dir):
     msas = versions_data.get('msas', {})
     for msa, msa_data in msas.items():
         values = {
-            'services': {},
-            'versions': {
-                'default_review': review_default,
-                'default_reveal_ai': reveal_ai_default,
-                'default_processing': processing_default
-            }
+            'services': dict(default_values['services']),
+            'versions': dict(default_values['versions'])
         }
-
-        for service, version in review_services.items():
-            values['services'][service] = {'tag': version}
 
         # Apply MSA-specific overrides
         for component, component_data in msa_data.items():
-            for service, version in component_data.items():
-                if component == 'review' and service in values['services']:
-                    values['services'][service]['tag'] = version
-                    print(f"Overriding {service} for MSA {msa} with version {version}")
+            if component == 'review':
+                for service, version in component_data.items():
+                    if service in values['services']:
+                        values['services'][service]['tag'] = version
+                        print(f"Overriding {service} for MSA {msa} with version {version}")
 
         # Output debug information before writing the file
         print(f"MSA {msa} values before writing to file: {values}")
