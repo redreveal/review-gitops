@@ -156,7 +156,6 @@ jobs:
     # DELETE AFTER FIGURING IT OUT
     - name: Output Before Running Script
       run: |
-        cat argocd-gitops/review/dev/us-east-1/default_values.yaml
         for MSA in $(cat msa_numbers.txt); do
           echo "Before Processing $MSA:"
           cat argocd-gitops/review/dev/us-east-1/$MSA.yaml
