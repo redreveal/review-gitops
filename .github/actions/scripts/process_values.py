@@ -41,24 +41,20 @@ def process_versions(version_file_path, output_dir):
     # Process each MSA
     msas = versions_data.get('msas', {})
     for msa, msa_data in msas.items():
+        # Start with the default values
         values = {
-            'services': {},
-            'versions': {
-                'default_review': review_default,
-                'default_reveal_ai': reveal_ai_default,
-                'default_processing': processing_default
-            }
+            'services': {**default_values['services']},
+            'versions': default_values['versions']
         }
-
-        for service, version in review_services.items():
-            values['services'][service] = {'tag': version}
 
         # Apply MSA-specific overrides
         for component, component_data in msa_data.items():
-            for service, version in component_data.items():
-                if component == 'review' and service in values['services']:
-                    values['services'][service]['tag'] = version
+            if component == 'review':
+                for service, version in component_data.items():
+                    if service in values['services']:
+                        values['services'][service]['tag'] = version
 
+        # Output the MSA-specific file
         msa_str = str(msa)
         output_file_path = os.path.join(output_dir, f'{msa_str}.yaml')
         write_yaml(values, output_file_path)
