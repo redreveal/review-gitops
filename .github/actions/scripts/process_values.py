@@ -33,6 +33,11 @@ def process_versions(version_file_path, output_dir):
     for service, version in review_services.items():
         default_values['services'][service] = {'tag': version}
 
+    # Write the default values.yaml
+    default_values_path = os.path.join(output_dir, 'default_values.yaml')
+    write_yaml(default_values, default_values_path)
+    print(f"Generated {default_values_path}")
+
     # Process each MSA
     msas = versions_data.get('msas', {})
     for msa, msa_data in msas.items():
@@ -45,7 +50,6 @@ def process_versions(version_file_path, output_dir):
             }
         }
 
-        # Start with the default values
         for service, version in review_services.items():
             values['services'][service] = {'tag': version}
 
@@ -54,12 +58,15 @@ def process_versions(version_file_path, output_dir):
             for service, version in component_data.items():
                 if component == 'review' and service in values['services']:
                     values['services'][service]['tag'] = version
+                    print(f"Overriding {service} for MSA {msa} with version {version}")
 
-        # Instead of creating a directory, generate the file directly
-        msa_str = str(msa)
-        output_file_path = os.path.join(output_dir, f'{msa_str}.yaml')
-        write_yaml(values, output_file_path)
-        print(f"Generated {output_file_path}")
+        # Output debug information before writing the file
+        print(f"MSA {msa} values before writing to file: {values}")
+
+        # Generate the MSA-specific YAML file
+        msa_file_path = os.path.join(output_dir, f"{msa}.yaml")
+        write_yaml(values, msa_file_path)
+        print(f"Generated {msa_file_path}")
 
 if __name__ == "__main__":
     for i in range(1, len(sys.argv), 2):
