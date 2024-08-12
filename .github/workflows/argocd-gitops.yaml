@@ -236,7 +236,7 @@ jobs:
                 echo "Removing existing symlink $FILE"
                 rm $FILE
               fi
-              ln -sf $DEFAULT_VALUES_FILE $FILE
+              ln -sf ./default_values.yaml $FILE
               echo "Symlinked $FILE to $DEFAULT_VALUES_FILE"
             fi
           done
