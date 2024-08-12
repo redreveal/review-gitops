@@ -156,9 +156,22 @@ jobs:
     # DELETE AFTER FIGURING IT OUT
     - name: Output Before Running Script
       run: |
-        for MSA in $(cat msa_numbers.txt); do
-          echo "Before Processing $MSA:"
-          cat argocd-gitops/review/dev/us-east-1/$MSA.yaml
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+
+          FILE="msa_numbers_${ENV}_${REGION}.txt"
+
+          echo "Before Processing MSA Numbers from $FILE:"
+          if [ -f $FILE ]; then
+            cat $FILE
+          else
+            echo "File $FILE does not exist."
+          fi
         done
 
     - name: Run the Python script to generate values.yaml
@@ -176,9 +189,22 @@ jobs:
     # DELETE AFTER FIGURING IT OUT
     - name: Output After Running Script
       run: |
-        for MSA in $(cat msa_numbers.txt); do
-          echo "After Processing $MSA:"
-          cat argocd-gitops/review/dev/us-east-1/$MSA.yaml
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+
+          FILE="msa_numbers_${ENV}_${REGION}.txt"
+
+          echo "Before Processing MSA Numbers from $FILE:"
+          if [ -f $FILE ]; then
+            cat $FILE
+          else
+            echo "File $FILE does not exist."
+          fi
         done
 
     - name: Handle Overrides and Symlinks
