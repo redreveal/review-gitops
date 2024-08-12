@@ -3,11 +3,11 @@ import os
 import sys
 
 def read_yaml(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         return yaml.safe_load(file)
 
 def write_yaml(data, file_path):
-    with open(file_path, 'w') as file:
+    with open(file_path, 'w', encoding='utf-8') as file:
         yaml.dump(data, file, default_flow_style=False)
 
 def process_versions(version_file_path, output_dir):
