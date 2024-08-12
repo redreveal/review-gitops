@@ -41,10 +41,10 @@ def process_versions(version_file_path, output_dir):
     # Process each MSA
     msas = versions_data.get('msas', {})
     for msa, msa_data in msas.items():
-        # Start with the default values
+        # Start with a deep copy of the default values
         values = {
-            'services': {**default_values['services']},
-            'versions': default_values['versions']
+            'services': {k: v.copy() for k, v in default_values['services'].items()},
+            'versions': default_values['versions'].copy()
         }
 
         # Apply MSA-specific overrides
