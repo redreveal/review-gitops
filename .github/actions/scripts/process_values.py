@@ -43,7 +43,7 @@ def process_versions(version_file_path, output_dir):
     for msa, msa_data in msas.items():
         # Start with a deep copy of the default values
         values = {
-            'services': {k: v.copy() for k, v in default_values['services'].items()},
+            'services': {service: {'tag': version['tag']} for service, version in default_values['services'].items()},
             'versions': default_values['versions'].copy()
         }
 
@@ -53,6 +53,8 @@ def process_versions(version_file_path, output_dir):
                 for service, version in component_data.items():
                     if service in values['services']:
                         values['services'][service]['tag'] = version
+                    else:
+                        values['services'][service] = {'tag': version}
 
         # Output the MSA-specific file
         msa_str = str(msa)
