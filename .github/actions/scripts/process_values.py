@@ -59,6 +59,7 @@ def process_versions(version_file_path, output_dir):
 
         # Generate the MSA-specific YAML file
         msa_file_path = os.path.join(output_dir, f"{msa}.yaml")
+        print(f"Writing to {msa_file_path}")
         write_yaml(values, msa_file_path)
         print(f"Generated {msa_file_path}")
 
