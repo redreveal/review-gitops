@@ -119,29 +119,29 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
-    - name: Ensure and Sync Versions Files in ArgoCD-GitOps
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-
-          VERSIONS_DIR="argocd-gitops/review/${ENV}/${REGION}"
-          VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
-
-          echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
-
-          mkdir -p $VERSIONS_DIR
-
-          if [ ! -f $VERSIONS_FILE ]; then
-            echo "default_all: 2024.7.29" > $VERSIONS_FILE
-          fi
-
-          cp review-gitops/${ENV}/${REGION}/versions.yaml $VERSIONS_FILE
-        done
+#    - name: Ensure and Sync Versions Files in ArgoCD-GitOps
+#      run: |
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#
+#          VERSIONS_DIR="argocd-gitops/review/${ENV}/${REGION}"
+#          VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
+#
+#          echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
+#
+#          mkdir -p $VERSIONS_DIR
+#
+#          if [ ! -f $VERSIONS_FILE ]; then
+#            echo "default_all: 2024.7.29" > $VERSIONS_FILE
+#          fi
+#
+#          cp review-gitops/${ENV}/${REGION}/versions.yaml $VERSIONS_FILE
+#        done
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -228,6 +228,10 @@ jobs:
 
             mkdir -p $DIRECTORY
 
+            if [ -L $FILE ]; then
+              echo "Removing existing symlink $FILE"
+              rm $FILE
+            fi
             if [ -f $FILE ]; then
               echo "MSA file $FILE already exists, skipping symlink."
             else
