@@ -42,17 +42,19 @@ def process_versions(version_file_path, output_dir):
 
         # Apply MSA-specific overrides for each component
         for component, component_data in msa_data.items():
-            # Override component version if specified at the MSA level
             component_key = f"default_{component}"
+
+            # If there's an override for the entire component's default version
             if 'default' in component_data:
                 msa_values['versions'][component_key] = component_data['default']
                 print(f"Overriding {component_key} for MSA {msa} with version {component_data['default']}")
 
             # Override specific service versions if specified at the MSA level
-            for service, version in component_data.get('services', {}).items():
-                if service in msa_values['services']:
-                    msa_values['services'][service]['tag'] = version
-                    print(f"Overriding {service} for MSA {msa} with version {version}")
+            if 'services' in component_data:
+                for service, version in component_data['services'].items():
+                    if service in msa_values['services']:
+                        msa_values['services'][service]['tag'] = version
+                        print(f"Overriding {service} for MSA {msa} with version {version}")
 
         # Write MSA-specific YAML file
         msa_file_path = os.path.join(output_dir, f"{msa}.yaml")
