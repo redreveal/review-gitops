@@ -16,6 +16,7 @@ def write_yaml(data, file_path):
 def process_versions(version_file_path, output_dir):
     versions_data = read_yaml(version_file_path)
 
+    os.makedirs(output_dir, exist_ok=True)
     # Extract defaults in ordder to generate the default versions for each components
     defaults = versions_data.get('defaults', {})
     default_values = {'services': {}, 'versions': {}}
