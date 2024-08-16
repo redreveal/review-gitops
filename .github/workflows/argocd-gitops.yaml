@@ -6,209 +6,569 @@ on:
       - main
 
 jobs:
-  update-argocd:
+  determine-environment:
     runs-on: ubuntu-latest
-
+    outputs:
+      prod_changed: ${{ steps.determine-env.outputs.prod_changed }}
+      non_prod_changed: ${{ steps.determine-env.outputs.non_prod_changed }}
     steps:
-    - name: Checkout Review-GitOps
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/review-gitops
-        token: ${{ secrets.TOKEN }}
-        path: review-gitops
+      - name: Checkout Repository
+        uses: actions/checkout@v2
 
-    - name: Determine Environment and Branch
-      id: determine-env
-      uses: actions/github-script@v5
-      with:
-        script: |
-          const payload = context.payload;
-          const repo = context.repo;
-          let base, head;
+      - name: Determine Environment Based on Modified Files
+        id: determine-env
+        uses: actions/github-script@v5
+        with:
+          script: |
+            const payload = context.payload;
+            const repo = context.repo;
+            let base, head;
 
-          if (payload.pull_request) {
-            base = payload.pull_request.base.sha;
-            head = payload.pull_request.head.sha;
-          } else {
-            base = payload.before;
-            head = payload.after;
-          }
-
-          const compare = await github.rest.repos.compareCommits({
-            owner: repo.owner,
-            repo: repo.repo,
-            base: base,
-            head: head
-          });
-
-          const regions_envs = [];
-          console.log('Files changed:');
-          compare.data.files.forEach(file => {
-            console.log(file.filename);
-            let region, env, branch;
-            if (file.filename.startsWith('dev/')) {
-              env = 'dev';
-              branch = 'develop';
-              region = file.filename.split('/')[1];
-            } else if (file.filename.startsWith('uat/')) {
-              env = 'uat';
-              branch = 'uat';
-              region = file.filename.split('/')[1];
-            } else if (file.filename.startsWith('prod/')) {
-              env = 'prod';
-              branch = 'production';
-              region = file.filename.split('/')[1];
+            if (payload.pull_request) {
+              base = payload.pull_request.base.sha;
+              head = payload.pull_request.head.sha;
+            } else {
+              base = payload.before;
+              head = payload.after;
             }
-            if (region && env && branch) {
-              regions_envs.push({region, env, branch});
+
+            const compare = await github.rest.repos.compareCommits({
+              owner: repo.owner,
+              repo: repo.repo,
+              base: base,
+              head: head
+            });
+
+            let prod_changed = false;
+            let non_prod_changed = false;
+
+            compare.data.files.forEach(file => {
+              if (file.filename.startsWith('prod/')) {
+                prod_changed = true;
+              } else if (file.filename.startsWith('dev/') || file.filename.startsWith('uat/')) {
+                non_prod_changed = true;
+              }
+            });
+
+            core.setOutput('prod_changed', prod_changed);
+            core.setOutput('non_prod_changed', non_prod_changed);
+
+  process-values-production:
+    needs: determine-environment
+    if: needs.determine-environment.outputs.prod_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: production  # Requires manual approval
+    steps:
+      - name: Checkout Review-GitOps
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/review-gitops
+          token: ${{ secrets.TOKEN }}
+          path: review-gitops
+
+      - name: Checkout Terraform Repo
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/red-terraform
+          token: ${{ secrets.TOKEN }}
+          path: terraform
+
+      - name: Install yq and jq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          sudo apt-get install -y jq
+
+      - name: Extract MSA Numbers for Production
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
             }
-          });
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            BRANCH=$(_jq '.branch')
 
-          const fs = require('fs');
-          fs.writeFileSync('regions_envs.json', JSON.stringify(regions_envs));
-          core.setOutput('regions_envs', 'regions_envs.json');
-          console.log(`Regions and Environments: ${JSON.stringify(regions_envs)}`);
+            if [[ "$ENV" == "prod" ]]; then
+              echo "Checking out branch $BRANCH for $ENV/$REGION"
+              cd terraform
+              git fetch origin
+              git checkout $BRANCH
+              git pull origin $BRANCH
 
-    - name: Checkout Terraform Repo
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/red-terraform
-        token: ${{ secrets.TOKEN }}
-        path: terraform
-
-    - name: Install yq and jq
-      run: |
-        sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
-        sudo chmod +x /usr/bin/yq
-        sudo apt-get install -y jq
-
-    - name: Extract MSA Numbers for Each Environment
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-          BRANCH=$(_jq '.branch')
-
-          echo "Checking out branch $BRANCH for $ENV/$REGION"
-          cd terraform
-          git fetch origin
-          git checkout $BRANCH
-          git pull origin $BRANCH
-
-          if [[ "$ENV" == "dev" ]]; then
-            MAIN_TF="dev/$REGION/99_clients/main.tf"
-          elif [[ "$ENV" == "uat" ]]; then
-            MAIN_TF="uat/$REGION/99_clients/main.tf"
-          elif [[ "$ENV" == "prod" ]]; then
-            MAIN_TF="prod/$REGION/99_clients/main.tf"
-          fi
-
-          echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
-          grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
-          cd ..
-        done
-
-    - name: Checkout ArgoCD-GitOps Repo
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/argocd-gitops-versions
-        token: ${{ secrets.TOKEN }}
-        path: argocd-gitops
-
-    - name: Handle Symlinks for Overridden and Non-Overridden MSAs
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-    
-          # Get the list of all MSAs in the region
-          ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
-    
-          # Get the list of MSAs with overrides from the current versions.yaml
-          OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
-    
-          for MSA in $ALL_MSAS; do
-            FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
-            DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
-    
-            if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
-              # Remove symlink if it exists for an overridden MSA
-              if [ -L $FILE ]; then
-                echo "Removing symlink for overridden MSA $MSA in $FILE"
-                rm $FILE
-              fi
-            else
-              # Convert existing file back to symlink if it's no longer overridden
-              if [ -f $FILE ] && [ ! -L $FILE ]; then
-                echo "Converting $FILE back to a symlink to default_values.yaml"
-                rm $FILE
-                ln -sf ./default_values.yaml $FILE
-              fi
+              MAIN_TF="prod/$REGION/99_clients/main.tf"
+              echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
+              grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
+              cd ..
             fi
           done
-        done
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
+      - name: Checkout ArgoCD-GitOps Repo
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/argocd-gitops-versions
+          token: ${{ secrets.TOKEN }}
+          path: argocd-gitops
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyyaml
+      - name: Handle Symlinks for Overridden and Non-Overridden MSAs in Production
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
 
-    - name: Run the Python script to generate values.yaml
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
-        done
+            if [[ "$ENV" == "prod" ]]; then
+              # Get the list of all MSAs in the region
+              ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
 
+              # Get the list of MSAs with overrides from the current versions.yaml
+              OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
 
-    - name: Create Symlinks for Non-Overridden MSAs
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-    
-          MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
-          for MSA in $MSAS; do
-            DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
-            FILE="$DIRECTORY/$MSA.yaml"
-            DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
-    
-            if [ ! -f $FILE ]; then
-              echo "Creating symlink for MSA $MSA to default_values.yaml"
-              ln -sf ./default_values.yaml $FILE
+              for MSA in $ALL_MSAS; do
+                FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
+                DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+
+                if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
+                  # Remove symlink if it exists for an overridden MSA
+                  if [ -L $FILE ]; then
+                    echo "Removing symlink for overridden MSA $MSA in $FILE"
+                    rm $FILE
+                  fi
+                else
+                  # Convert existing file back to symlink if it's no longer overridden
+                  if [ -f $FILE ] && [ ! -L $FILE ]; then
+                    echo "Converting $FILE back to a symlink to default_values.yaml"
+                    rm $FILE
+                    ln -sf ./default_values.yaml $FILE
+                  fi
+                fi
+              done
             fi
           done
-        done
 
-    - name: Commit and Push
-      run: |
-        cd argocd-gitops
-        git config user.email "rberisha@revealdata.com"
-        git config user.name "Redon Berisha"
-        git add .
-        git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
-        git push
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Run the Python script to generate values.yaml for Production
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            if [[ "$ENV" == "prod" ]]; then
+              python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+            fi
+          done
+
+      - name: Create Symlinks for Non-Overridden MSAs in Production
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+
+            if [[ "$ENV" == "prod" ]]; then
+              MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+              for MSA in $MSAS; do
+                DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
+                FILE="$DIRECTORY/$MSA.yaml"
+                DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+
+                if [ ! -f $FILE ]; then
+                  echo "Creating symlink for MSA $MSA to default_values.yaml"
+                  ln -sf ./default_values.yaml $FILE
+                fi
+              done
+            fi
+          done
+
+      - name: Commit and Push Updates for Production
+        run: |
+          cd argocd-gitops
+          git config user.email "rberisha@revealdata.com"
+          git config user.name "Redon Berisha"
+          git add .
+          git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+
+  process-values-dev-uat:
+    needs: determine-environment
+    if: needs.determine-environment.outputs.non_prod_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Review-GitOps
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/review-gitops
+          token: ${{ secrets.TOKEN }}
+          path: review-gitops
+
+      - name: Checkout Terraform Repo
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/red-terraform
+          token: ${{ secrets.TOKEN }}
+          path: terraform
+
+      - name: Install yq and jq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          sudo apt-get install -y jq
+
+      - name: Extract MSA Numbers for Dev/Uat
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            BRANCH=$(_jq '.branch')
+
+            if [[ "$ENV" == "dev" || "$ENV" == "uat" ]]; then
+              echo "Checking out branch $BRANCH for $ENV/$REGION"
+              cd terraform
+              git fetch origin
+              git checkout $BRANCH
+              git pull origin $BRANCH
+
+              MAIN_TF="${ENV}/$REGION/99_clients/main.tf"
+              echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
+              grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
+              cd ..
+            fi
+          done
+
+      - name: Checkout ArgoCD-GitOps Repo
+        uses: actions/checkout@v2
+        with:
+          repository: redreveal/argocd-gitops-versions
+          token: ${{ secrets.TOKEN }}
+          path: argocd-gitops
+
+      - name: Handle Symlinks for Overridden and Non-Overridden MSAs in Dev/Uat
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+
+            if [[ "$ENV" == "dev" || "$ENV" == "uat" ]]; then
+              # Get the list of all MSAs in the region
+              ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+
+              # Get the list of MSAs with overrides from the current versions.yaml
+              OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+
+              for MSA in $ALL_MSAS; do
+                FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
+                DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+
+                if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
+                  # Remove symlink if it exists for an overridden MSA
+                  if [ -L $FILE ]; then
+                    echo "Removing symlink for overridden MSA $MSA in $FILE"
+                    rm $FILE
+                  fi
+                else
+                  # Convert existing file back to symlink if it's no longer overridden
+                  if [ -f $FILE ] && [ ! -L $FILE ]; then
+                    echo "Converting $FILE back to a symlink to default_values.yaml"
+                    rm $FILE
+                    ln -sf ./default_values.yaml $FILE
+                  fi
+                fi
+              done
+            fi
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Run the Python script to generate values.yaml for Dev/Uat
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            if [[ "$ENV" == "dev" || "$ENV" == "uat" ]]; then
+              python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+            fi
+          done
+
+      - name: Create Symlinks for Non-Overridden MSAs in Dev/Uat
+        run: |
+          regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+          for region_env in $regions_envs; do
+            _jq() {
+              echo ${region_env} | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+
+            if [[ "$ENV" == "dev" || "$ENV" == "uat" ]]; then
+              MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+              for MSA in $MSAS; do
+                DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
+                FILE="$DIRECTORY/$MSA.yaml"
+                DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+
+                if [ ! -f $FILE ]; then
+                  echo "Creating symlink for MSA $MSA to default_values.yaml"
+                  ln -sf ./default_values.yaml $FILE
+                fi
+              done
+            fi
+          done
+
+      - name: Commit and Push Updates for Dev/Uat
+        run: |
+          cd argocd-gitops
+          git config user.email "rberisha@revealdata.com"
+          git config user.name "Redon Berisha"
+          git add .
+          git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+
+#  update-argocd:
+#    runs-on: ubuntu-latest
+#
+#    steps:
+#    - name: Checkout Review-GitOps
+#      uses: actions/checkout@v2
+#      with:
+#        repository: redreveal/review-gitops
+#        token: ${{ secrets.TOKEN }}
+#        path: review-gitops
+#
+#    - name: Determine Environment and Branch
+#      id: determine-env
+#      uses: actions/github-script@v5
+#      with:
+#        script: |
+#          const payload = context.payload;
+#          const repo = context.repo;
+#          let base, head;
+#
+#          if (payload.pull_request) {
+#            base = payload.pull_request.base.sha;
+#            head = payload.pull_request.head.sha;
+#          } else {
+#            base = payload.before;
+#            head = payload.after;
+#          }
+#
+#          const compare = await github.rest.repos.compareCommits({
+#            owner: repo.owner,
+#            repo: repo.repo,
+#            base: base,
+#            head: head
+#          });
+#
+#          const regions_envs = [];
+#          console.log('Files changed:');
+#          compare.data.files.forEach(file => {
+#            console.log(file.filename);
+#            let region, env, branch;
+#            if (file.filename.startsWith('dev/')) {
+#              env = 'dev';
+#              branch = 'develop';
+#              region = file.filename.split('/')[1];
+#            } else if (file.filename.startsWith('uat/')) {
+#              env = 'uat';
+#              branch = 'uat';
+#              region = file.filename.split('/')[1];
+#            } else if (file.filename.startsWith('prod/')) {
+#              env = 'prod';
+#              branch = 'production';
+#              region = file.filename.split('/')[1];
+#            }
+#            if (region && env && branch) {
+#              regions_envs.push({region, env, branch});
+#            }
+#          });
+#
+#          const fs = require('fs');
+#          fs.writeFileSync('regions_envs.json', JSON.stringify(regions_envs));
+#          core.setOutput('regions_envs', 'regions_envs.json');
+#          console.log(`Regions and Environments: ${JSON.stringify(regions_envs)}`);
+#
+#    - name: Checkout Terraform Repo
+#      uses: actions/checkout@v2
+#      with:
+#        repository: redreveal/red-terraform
+#        token: ${{ secrets.TOKEN }}
+#        path: terraform
+#
+#    - name: Install yq and jq
+#      run: |
+#        sudo wget https://github.com/mikefarah/yq/releases/download/v4.6.1/yq_linux_amd64 -O /usr/bin/yq
+#        sudo chmod +x /usr/bin/yq
+#        sudo apt-get install -y jq
+#
+#    - name: Extract MSA Numbers for Each Environment
+#      run: |
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#          BRANCH=$(_jq '.branch')
+#
+#          echo "Checking out branch $BRANCH for $ENV/$REGION"
+#          cd terraform
+#          git fetch origin
+#          git checkout $BRANCH
+#          git pull origin $BRANCH
+#
+#          if [[ "$ENV" == "dev" ]]; then
+#            MAIN_TF="dev/$REGION/99_clients/main.tf"
+#          elif [[ "$ENV" == "uat" ]]; then
+#            MAIN_TF="uat/$REGION/99_clients/main.tf"
+#          elif [[ "$ENV" == "prod" ]]; then
+#            MAIN_TF="prod/$REGION/99_clients/main.tf"
+#          fi
+#
+#          echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
+#          grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${ENV}_${REGION}.txt
+#          cd ..
+#        done
+#
+#    - name: Checkout ArgoCD-GitOps Repo
+#      uses: actions/checkout@v2
+#      with:
+#        repository: redreveal/argocd-gitops-versions
+#        token: ${{ secrets.TOKEN }}
+#        path: argocd-gitops
+#
+#    - name: Handle Symlinks for Overridden and Non-Overridden MSAs
+#      run: |
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#
+#          # Get the list of all MSAs in the region
+#          ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+#
+#          # Get the list of MSAs with overrides from the current versions.yaml
+#          OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+#
+#          for MSA in $ALL_MSAS; do
+#            FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
+#            DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+#
+#            if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
+#              # Remove symlink if it exists for an overridden MSA
+#              if [ -L $FILE ]; then
+#                echo "Removing symlink for overridden MSA $MSA in $FILE"
+#                rm $FILE
+#              fi
+#            else
+#              # Convert existing file back to symlink if it's no longer overridden
+#              if [ -f $FILE ] && [ ! -L $FILE ]; then
+#                echo "Converting $FILE back to a symlink to default_values.yaml"
+#                rm $FILE
+#                ln -sf ./default_values.yaml $FILE
+#              fi
+#            fi
+#          done
+#        done
+#
+#    - name: Set up Python
+#      uses: actions/setup-python@v2
+#      with:
+#        python-version: '3.x'
+#
+#    - name: Install dependencies
+#      run: |
+#        python -m pip install --upgrade pip
+#        pip install pyyaml
+#
+#    - name: Run the Python script to generate values.yaml
+#      run: |
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#          python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
+#        done
+#
+#
+#    - name: Create Symlinks for Non-Overridden MSAs
+#      run: |
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#
+#          MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+#          for MSA in $MSAS; do
+#            DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
+#            FILE="$DIRECTORY/$MSA.yaml"
+#            DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+#
+#            if [ ! -f $FILE ]; then
+#              echo "Creating symlink for MSA $MSA to default_values.yaml"
+#              ln -sf ./default_values.yaml $FILE
+#            fi
+#          done
+#        done
+#
+#    - name: Commit and Push
+#      run: |
+#        cd argocd-gitops
+#        git config user.email "rberisha@revealdata.com"
+#        git config user.name "Redon Berisha"
+#        git add .
+#        git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
+#        git push
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.TOKEN }}
