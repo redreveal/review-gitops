@@ -119,29 +119,27 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
-#    - name: Ensure and Sync Versions Files in ArgoCD-GitOps
-#      run: |
-#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-#        for region_env in $regions_envs; do
-#          _jq() {
-#            echo ${region_env} | base64 --decode | jq -r ${1}
-#          }
-#          REGION=$(_jq '.region')
-#          ENV=$(_jq '.env')
-#
-#          VERSIONS_DIR="argocd-gitops/review/${ENV}/${REGION}"
-#          VERSIONS_FILE="$VERSIONS_DIR/versions.yaml"
-#
-#          echo "Ensuring versions.yaml exists in $VERSIONS_DIR"
-#
-#          mkdir -p $VERSIONS_DIR
-#
-#          if [ ! -f $VERSIONS_FILE ]; then
-#            echo "default_all: 2024.7.29" > $VERSIONS_FILE
-#          fi
-#
-#          cp review-gitops/${ENV}/${REGION}/versions.yaml $VERSIONS_FILE
-#        done
+    - name: Remove Symlinks for Overridden MSAs
+      run: |
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          
+          OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+          
+          for MSA in $OVERRIDDEN_MSAS; do
+            FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
+    
+            if [ -L $FILE ]; then
+              echo "Removing symlink for overridden MSA $MSA in $FILE"
+              rm $FILE
+            fi
+          done
+        done
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -152,27 +150,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyyaml
-
-    # DELETE AFTER FIGURING IT OUT
-    - name: Output Before Running Script
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-
-          FILE="msa_numbers_${ENV}_${REGION}.txt"
-
-          echo "Before Processing MSA Numbers from $FILE:"
-          if [ -f $FILE ]; then
-            cat $FILE
-          else
-            echo "File $FILE does not exist."
-          fi
-        done
 
     - name: Run the Python script to generate values.yaml
       run: |
@@ -186,8 +163,8 @@ jobs:
           python review-gitops/.github/actions/scripts/process_values.py review-gitops/${ENV}/${REGION}/versions.yaml argocd-gitops/review/${ENV}/${REGION}
         done
 
-    # DELETE AFTER FIGURING IT OUT
-    - name: Output After Running Script
+
+    - name: Create Symlinks for Non-Overridden MSAs
       run: |
         regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
@@ -196,52 +173,16 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-
-          FILE="msa_numbers_${ENV}_${REGION}.txt"
-
-          echo "Before Processing MSA Numbers from $FILE:"
-          if [ -f $FILE ]; then
-            cat $FILE
-          else
-            echo "File $FILE does not exist."
-          fi
-        done
-
-    - name: Handle Overrides and Symlinks
-      run: |
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-          
+    
           MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
           for MSA in $MSAS; do
             DIRECTORY="argocd-gitops/review/${ENV}/${REGION}"
             FILE="$DIRECTORY/$MSA.yaml"
             DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
-
-            echo "Processing MSA $MSA in directory $DIRECTORY"
-            echo "Checking for overrides in $DEFAULT_VALUES_FILE"
-
-            mkdir -p $DIRECTORY
-
-            if [ -L $FILE ]; then
-              echo "Removing existing symlink $FILE"
-              rm $FILE
-            fi
-            if [ -f $FILE ]; then
-              echo "MSA file $FILE already exists, skipping symlink."
-            else
-              # If the MSA-specific file doesn't exist, symlink to default_values.yaml
-              if [ -L $FILE ]; then
-                echo "Removing existing symlink $FILE"
-                rm $FILE
-              fi
+    
+            if [ ! -f $FILE ]; then
+              echo "Creating symlink for MSA $MSA to default_values.yaml"
               ln -sf ./default_values.yaml $FILE
-              echo "Symlinked $FILE to $DEFAULT_VALUES_FILE"
             fi
           done
         done
