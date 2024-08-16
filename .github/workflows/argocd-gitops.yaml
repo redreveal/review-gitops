@@ -119,7 +119,7 @@ jobs:
         token: ${{ secrets.TOKEN }}
         path: argocd-gitops
 
-    - name: Remove Symlinks for Overridden MSAs
+    - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
         regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
@@ -128,15 +128,30 @@ jobs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          
-          OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
-          
-          for MSA in $OVERRIDDEN_MSAS; do
-            FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
     
-            if [ -L $FILE ]; then
-              echo "Removing symlink for overridden MSA $MSA in $FILE"
-              rm $FILE
+          # Get the list of all MSAs in the region
+          ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
+    
+          # Get the list of MSAs with overrides from the current versions.yaml
+          OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+    
+          for MSA in $ALL_MSAS; do
+            FILE="argocd-gitops/review/${ENV}/${REGION}/$MSA.yaml"
+            DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
+    
+            if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
+              # Remove symlink if it exists for an overridden MSA
+              if [ -L $FILE ]; then
+                echo "Removing symlink for overridden MSA $MSA in $FILE"
+                rm $FILE
+              fi
+            else
+              # Convert existing file back to symlink if it's no longer overridden
+              if [ -f $FILE ] && [ ! -L $FILE ]; then
+                echo "Converting $FILE back to a symlink to default_values.yaml"
+                rm $FILE
+                ln -sf ./default_values.yaml $FILE
+              fi
             fi
           done
         done
