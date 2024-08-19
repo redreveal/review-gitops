@@ -394,7 +394,9 @@ jobs:
           done
 
       - name: Show Differences
-        run: git diff
+        run: |
+          cd argocd-gitops
+          git diff
 
       - name: Create Symlinks for Non-Overridden MSAs in Dev/Uat
         run: |
@@ -422,7 +424,9 @@ jobs:
           done
 
       - name: Show Differences
-        run: git diff
+        run: |
+          cd argocd-gitops
+          git diff
 
       - name: Commit and Push Updates for Dev/Uat
         run: |
