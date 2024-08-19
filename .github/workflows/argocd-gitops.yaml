@@ -204,6 +204,11 @@ jobs:
             fi
           done
 
+      - name: Show Differences
+        run: |
+          cd argocd-gitops
+          git diff
+
       - name: Create Symlinks for Non-Overridden MSAs in Production
         run: |
           regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
@@ -228,6 +233,11 @@ jobs:
               done
             fi
           done
+
+      - name: Show Differences
+        run: |
+          cd argocd-gitops
+          git diff
 
       - name: Commit and Push Updates for Production
         run: |
