@@ -57,7 +57,7 @@ jobs:
     needs: determine-environment
     if: needs.determine-environment.outputs.prod_changed == 'true'
     runs-on: ubuntu-latest
-    environment: production  # Requires manual approval
+    environment: production
     steps:
       - name: Checkout Review-GitOps
         uses: actions/checkout@v2
@@ -157,10 +157,7 @@ jobs:
             ENV=$(_jq '.env')
 
             if [[ "$ENV" == "prod" ]]; then
-              # Get the list of all MSAs in the region
               ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
-
-              # Get the list of MSAs with overrides from the current versions.yaml
               OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
 
               for MSA in $ALL_MSAS; do
@@ -168,13 +165,11 @@ jobs:
                 DEFAULT_VALUES_FILE="argocd-gitops/review/${ENV}/${REGION}/default_values.yaml"
 
                 if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
-                  # Remove symlink if it exists for an overridden MSA
                   if [ -L $FILE ]; then
                     echo "Removing symlink for overridden MSA $MSA in $FILE"
                     rm $FILE
                   fi
                 else
-                  # Convert existing file back to symlink if it's no longer overridden
                   if [ -f $FILE ] && [ ! -L $FILE ]; then
                     echo "Converting $FILE back to a symlink to default_values.yaml"
                     rm $FILE
@@ -349,10 +344,7 @@ jobs:
             ENV=$(_jq '.env')
 
             if [[ "$ENV" == "dev" || "$ENV" == "uat" ]]; then
-              # Get the list of all MSAs in the region
               ALL_MSAS=$(cat msa_numbers_${ENV}_${REGION}.txt | sort -u)
-
-              # Get the list of MSAs with overrides from the current versions.yaml
               OVERRIDDEN_MSAS=$(yq eval '.msas | keys' review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
 
               for MSA in $ALL_MSAS; do
@@ -401,6 +393,9 @@ jobs:
             fi
           done
 
+      - name: Show Differences
+        run: git diff
+
       - name: Create Symlinks for Non-Overridden MSAs in Dev/Uat
         run: |
           regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
@@ -425,6 +420,9 @@ jobs:
               done
             fi
           done
+
+      - name: Show Differences
+        run: git diff
 
       - name: Commit and Push Updates for Dev/Uat
         run: |
