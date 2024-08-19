@@ -13,12 +13,12 @@ msas:
   91010000:
     review:
       services:
-        search: 2024.7.14
+        search: 2024.7.12
   91010001:
     review:
       services:
-        search: 2024.7.16
+        search: 2024.7.14
   91010003:
     review:
       services:
-        search: 2024.7.18
+        search: 2024.7.13
