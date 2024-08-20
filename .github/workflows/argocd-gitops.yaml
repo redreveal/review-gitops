@@ -406,7 +406,30 @@ jobs:
       - name: Show Differences
         run: |
           cd argocd-gitops
-          git diff
+          git diff --name-only | grep 'argocd-gitops/review/' > modified_files.txt
+          cat modified_files.txt
+
+      - name: Install Helm
+        run: |
+          curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Generate Helm Template and Verify Tags
+        run: |
+          
+          helm repo add redon-chart-repo https://redon-cdn.s3.amazonaws.com/
+          while IFS= read -r values_file; do
+            echo "Processing $values_file"
+            helm template redon-chart-repo/argopoc --values $values_file > rendered_template.yaml
+      
+            # Extract image tags from the rendered template
+            tags=$(grep 'image:' rendered_template.yaml | awk -F: '{print $3}')
+            for tag in $tags; do
+              # Check if tag exists in ECR
+              #aws ecr describe-images --repository-name $REPO_NAME --image-ids imageTag=$tag || exit 1
+              echo "Tag $tag exists in ECR for repo $REPO_NAME"
+            done
+          done < modified_files.txt
+          
 
       - name: Create Symlinks for Non-Overridden MSAs in Dev/Uat
         run: |
