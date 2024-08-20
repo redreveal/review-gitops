@@ -406,8 +406,8 @@ jobs:
       - name: Show Differences
         run: |
           cd argocd-gitops
-          git diff --name-only | grep 'review/' > modified_files.txt
-          cat modified_files.txt
+          git diff --name-only | grep 'review/' | sed "s|^|$(pwd)/|" > ../modified_files.txt
+          cat ../modified_files.txt
 
       - name: Install Helm
         run: |
