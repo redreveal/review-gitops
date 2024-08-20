@@ -13,7 +13,7 @@ msas:
   91010000:
     review:
       services:
-        search: 2024.7.124
+        search: 2024.7.125
         documentloader: latest
         export: latest
   91010001:
