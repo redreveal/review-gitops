@@ -428,7 +428,7 @@ jobs:
               #aws ecr describe-images --repository-name $REPO_NAME --image-ids imageTag=$tag || exit 1
               echo "Tag $tag exists in ECR for repo $REPO_NAME"
             done
-          done < argocd-gitops/modified_files.txt
+          done < modified_files.txt
           
 
       - name: Create Symlinks for Non-Overridden MSAs in Dev/Uat
