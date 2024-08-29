@@ -47,6 +47,7 @@ runs:
             cd ..
           fi
         done
+      shell: bash
 
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
@@ -81,6 +82,7 @@ runs:
             done
           fi
         done
+      shell: bash
 
     - name: Run Python Script to Generate Values
       run: |
@@ -95,6 +97,7 @@ runs:
             python ${{ inputs.review_gitops_path }}/.github/actions/scripts/process_values.py ${{ inputs.review_gitops_path }}/${ENV}/${REGION}/versions.yaml ${{ inputs.gitops_repo_path }}/review/${ENV}/${REGION}
           fi
         done
+      shell: bash
 
     - name: Verify Helm Templates and Tags
       run: |
@@ -123,11 +126,13 @@ runs:
             echo "Tag $tag exists in ECR for repo $repo"
           done
         done < ../modified_files.txt
+      shell: bash
 
     - name: Show Differences
       run: |
         cd ${{ inputs.gitops_repo_path }}
         git diff
+      shell: bash
 
     - name: Commit and Push Updates
       run: |
@@ -137,5 +142,6 @@ runs:
         git add .
         git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
         git push
+      shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
