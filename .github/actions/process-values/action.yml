@@ -1,23 +1,8 @@
 name: Process Values
-description: Handle MSA processing, run Python scripts, and verify Helm templates.
+description: Handle MSA processing, run Python scripts, and verify Helm templates
 inputs:
   env_type:
     description: 'Environment type (prod, dev, uat)'
-    required: true
-  regions_envs_file:
-    description: 'Path to the regions_envs.json file'
-    required: true
-  msa_numbers_prefix:
-    description: 'Prefix for the msa_numbers file'
-    required: true
-  review_gitops_path:
-    description: 'Path to the Review-GitOps repository'
-    required: true
-  terraform_repo_path:
-    description: 'Path to the Terraform repository'
-    required: true
-  gitops_repo_path:
-    description: 'Path to the ArgoCD-GitOps repository'
     required: true
   github_token:
     description: 'GitHub token for pushing changes'
@@ -26,10 +11,47 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Generate regions_envs.json
+      run: |
+        cd review-gitops
+        const { context, github } = require('@actions/github');
+        const payload = context.payload;
+        const repo = context.repo;
+        let base, head;
+
+        if (payload.pull_request) {
+          base = payload.pull_request.base.sha;
+          head = payload.pull_request.head.sha;
+        } else {
+          base = payload.before;
+          head = payload.after;
+        }
+
+        const compare = await github.rest.repos.compareCommits({
+          owner: repo.owner,
+          repo: repo.repo,
+          base: base,
+          head: head,
+        });
+
+        const regions_envs = [];
+        compare.data.files.forEach(file => {
+          if (file.filename.startsWith('${{ inputs.env_type }}/')) {
+            let env = `${{ inputs.env_type }}`;
+            let region = file.filename.split('/')[1];
+            regions_envs.push({ region, env, branch: env === 'prod' ? 'production' : env === 'dev' ? 'develop' : 'uat' });
+          }
+        });
+
+        const fs = require('fs');
+        fs.writeFileSync('regions_envs.json', JSON.stringify(regions_envs));
+        console.log(`Regions and Environments for ${{ inputs.env_type }}: ${JSON.stringify(regions_envs)}`);
+      shell: bash
+
     - name: Extract MSA Numbers
       run: |
-        cd ${{ inputs.terraform_repo_path }}
-        regions_envs=$(cat ${{ inputs.regions_envs_file }} | jq -r '.[] | @base64')
+        cd terraform
+        regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -53,8 +75,8 @@ runs:
 
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
-        cd ${{ inputs.argocd_gitops_path }}
-        regions_envs=$(cat ${{ inputs.regions_envs_file }} | jq -r '.[] | @base64')
+        cd argocd-gitops
+        regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -64,11 +86,11 @@ runs:
 
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
             ALL_MSAS=$(cat ../msa_numbers_${{ inputs.env_type }}_${REGION}.txt | sort -u)
-            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ${{ inputs.review_gitops_path }}/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
 
             for MSA in $ALL_MSAS; do
-              FILE="${{ inputs.argocd_gitops_path }}/review/${ENV}/${REGION}/$MSA.yaml"
-              DEFAULT_VALUES_FILE="${{ inputs.argocd_gitops_path }}/review/${ENV}/${REGION}/default_values.yaml"
+              FILE="review/${ENV}/${REGION}/$MSA.yaml"
+              DEFAULT_VALUES_FILE="review/${ENV}/${REGION}/default_values.yaml"
 
               if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
                 if [ -L $FILE ]; then
@@ -89,8 +111,8 @@ runs:
 
     - name: Run Python Script to Generate Values
       run: |
-        cd ${{ inputs.review_gitops_path }}
-        regions_envs=$(cat ${{ inputs.regions_envs_file }} | jq -r '.[] | @base64')
+        cd review-gitops
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -99,53 +121,48 @@ runs:
           ENV=$(_jq '.env')
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
             echo "Running Python script for $ENV/$REGION"
-            python ${{ inputs.review_gitops_path }}/.github/actions/scripts/process_values.py ${{ inputs.review_gitops_path }}/${ENV}/${REGION}/versions.yaml ${{ inputs.argocd_gitops_path }}/review/${ENV}/${REGION}
+            python .github/actions/scripts/process_values.py ${ENV}/${REGION}/versions.yaml ../argocd-gitops/review/${ENV}/${REGION}
           fi
         done
       shell: bash
 
-#    - name: Verify Helm Templates and Tags
-#      run: |
-#        cd ${{ inputs.argocd_gitops_path }}
-#        echo "Running git diff to find modified files..."
-#        git diff --name-only | grep 'review/' > ../modified_files_raw.txt
-#
-#        if [ ! -s ../modified_files_raw.txt ]; then
-#          echo "No modified files found matching 'review/'. Exiting."
-#          exit 0
-#        fi
-#
-#        sed "s|^|$(pwd)/|" ../modified_files_raw.txt > ../modified_files.txt
-#        cat ../modified_files.txt
-#
-#        echo "Running helm repo add and update..."
-#        helm repo add redon-chart-repo https://redon-cdn.s3.amazonaws.com/
-#        helm repo update
-#
-#        while IFS= read -r values_file; do
-#          echo "Processing $values_file"
-#          helm template redon-chart-repo/argopoc --values $values_file > rendered_template.yaml
-#
-#          grep 'image:' rendered_template.yaml | while read -r line ; do
-#            repo=$(echo $line | awk -F: '{print $2}' | sed 's| //||g' | awk -F/ '{print $2}')
-#            tag=$(echo $line | awk -F: '{print $3}')
-#
-#            if [ -z "$repo" ] || [ -z "$tag" ]; then
-#              echo "Failed to parse repo or tag from line: $line"
-#              exit 1
-#            fi
-#
-#            echo "Checking tag $tag for repository $repo in file $values_file"
-#            # Uncomment the following line to actually check in AWS ECR
-#            # aws ecr describe-images --repository-name $repo --image-ids imageTag=$tag || exit 1
-#            echo "Tag $tag exists in ECR for repo $repo"
-#          done
-#        done < ../modified_files.txt
-#      shell: bash
+    - name: Verify Helm Templates and Tags
+      run: |
+        cd argocd-gitops
+        git diff --name-only | grep 'review/' > ../modified_files_raw.txt
+
+        if [ ! -s ../modified_files_raw.txt ]; then
+          echo "No modified files found matching 'review/'. Exiting."
+          exit 0
+        fi
+
+        sed "s|^|$(pwd)/|" ../modified_files_raw.txt > ../modified_files.txt
+        cat ../modified_files.txt
+
+        helm repo add redon-chart-repo https://redon-cdn.s3.amazonaws.com/
+        helm repo update
+
+        while IFS= read -r values_file; do
+          echo "Processing $values_file"
+          helm template redon-chart-repo/argopoc --values $values_file > rendered_template.yaml
+
+          grep 'image:' rendered_template.yaml | while read -r line ; do
+            repo=$(echo $line | awk -F: '{print $2}' | sed 's| //||g' | awk -F/ '{print $2}')
+            tag=$(echo $line | awk -F: '{print $3}')
+
+            if [ -z "$repo" ] || [ -z "$tag" ]; then
+              echo "Failed to parse repo or tag from line: $line"
+              exit 1
+            fi
+
+            echo "Checking tag $tag for repository $repo in file $values_file"
+          done
+        done < ../modified_files.txt
+      shell: bash
 
     - name: Commit and Push Updates
       run: |
-        cd ${{ inputs.argocd_gitops_path }}
+        cd argocd-gitops
         git config user.email "your_email@example.com"
         git config user.name "Your Name"
         git add .

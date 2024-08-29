@@ -64,27 +64,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
-      - name: Setup Production Environment
+      - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
-          env_type: 'prod'
           repo_token: ${{ secrets.TOKEN }}
-          review_gitops_path: 'review-gitops'
-          terraform_repo_path: 'terraform'
-          argocd_gitops_path: 'argocd-gitops'
 
       - name: Process Production Values
         uses: ./.github/actions/process-values
         with:
           env_type: 'prod'
-          regions_envs_file: 'regions_envs.json'
-          msa_numbers_prefix: 'msa_numbers'
-          gitops_repo_path: 'argocd-gitops'
-          terraform_repo_path: 'terraform'
-          review_gitops_path: 'review-gitops'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   process-values-dev:
@@ -92,26 +80,15 @@ jobs:
     if: needs.determine-environment.outputs.dev_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
-          review_gitops_path: 'review-gitops'
-          terraform_repo_path: 'terraform'
-          argocd_gitops_path: 'argocd-gitops'
           repo_token: ${{ secrets.TOKEN }}
 
       - name: Process Dev Values
         uses: ./.github/actions/process-values
         with:
           env_type: 'dev'
-          regions_envs_file: 'review-gitops/regions_envs.json'
-          msa_numbers_prefix: 'msa_numbers'
-          review_gitops_path: 'review-gitops'
-          terraform_repo_path: 'terraform'
-          argocd_gitops_path: 'argocd-gitops'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   process-values-uat:
@@ -119,24 +96,13 @@ jobs:
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
-          review_gitops_path: 'review-gitops'
-          terraform_repo_path: 'terraform'
-          argocd_gitops_path: 'argocd-gitops'
           repo_token: ${{ secrets.TOKEN }}
 
       - name: Process UAT Values
         uses: ./.github/actions/process-values
         with:
           env_type: 'uat'
-          regions_envs_file: 'review-gitops/regions_envs.json'
-          msa_numbers_prefix: 'msa_numbers'
-          review_gitops_path: 'review-gitops'
-          terraform_repo_path: 'terraform'
-          argocd_gitops_path: 'argocd-gitops'
           github_token: ${{ secrets.GITHUB_TOKEN }}
