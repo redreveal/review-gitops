@@ -81,6 +81,8 @@ runs:
         set -e
         echo "Starting symlink handling..."
         cd argocd-gitops
+        echo "Current working directory:"
+        pwd
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
