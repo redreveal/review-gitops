@@ -19,8 +19,8 @@ msas:
   91010001:
     review:
       services:
-        search: 2024.7.38
+        search: 2024.7.37
   91010003:
     review:
       services:
-        search: 2024.7.38
+        search: 2024.7.39
