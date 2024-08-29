@@ -92,6 +92,9 @@ jobs:
     if: needs.determine-environment.outputs.dev_changed == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
@@ -116,6 +119,9 @@ jobs:
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
