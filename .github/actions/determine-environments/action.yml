@@ -11,9 +11,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v2
-
     - name: Determine Environment Based on Modified Files
       uses: actions/github-script@v5
       with:
