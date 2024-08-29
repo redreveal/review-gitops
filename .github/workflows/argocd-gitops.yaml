@@ -99,6 +99,7 @@ jobs:
     needs: determine-environment
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
+    environment: uat
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
