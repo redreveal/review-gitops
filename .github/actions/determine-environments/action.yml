@@ -12,6 +12,7 @@ runs:
   using: "composite"
   steps:
     - name: Determine Environment Based on Modified Files
+      id: determine-env
       uses: actions/github-script@v5
       with:
         script: |
@@ -51,7 +52,6 @@ runs:
           core.setOutput('prod_changed', prod_changed);
           core.setOutput('dev_changed', dev_changed);
           core.setOutput('uat_changed', uat_changed)
-      id: determine-env
 
     - name: Set Outputs
       run: |
