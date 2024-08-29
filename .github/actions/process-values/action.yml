@@ -1,3 +1,4 @@
+# .github/actions/process-values/action.yml
 name: Process Values
 description: Handle MSA processing, run Python scripts, and verify Helm templates
 inputs:
@@ -13,6 +14,8 @@ runs:
   steps:
     - name: Generate regions_envs.json
       run: |
+        set -e
+        echo "Starting regions_envs.json generation..."
         cd review-gitops
         const { context, github } = require('@actions/github');
         const payload = context.payload;
@@ -45,11 +48,14 @@ runs:
 
         const fs = require('fs');
         fs.writeFileSync('regions_envs.json', JSON.stringify(regions_envs));
-        console.log(`Regions and Environments for ${{ inputs.env_type }}: ${JSON.stringify(regions_envs)}`);
+        echo "Finished generating regions_envs.json"
+        echo "Regions and Environments for ${{ inputs.env_type }}: ${JSON.stringify(regions_envs)}"
       shell: bash
 
     - name: Extract MSA Numbers
       run: |
+        set -e
+        echo "Starting MSA extraction..."
         cd terraform
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
@@ -71,10 +77,13 @@ runs:
             grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${{ inputs.env_type }}_${REGION}.txt
           fi
         done
+        echo "Finished MSA extraction."
       shell: bash
 
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
+        set -e
+        echo "Starting symlink handling..."
         cd argocd-gitops
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
@@ -107,10 +116,13 @@ runs:
             done
           fi
         done
+        echo "Finished symlink handling."
       shell: bash
 
     - name: Run Python Script to Generate Values
       run: |
+        set -e
+        echo "Starting Python script to generate values..."
         cd review-gitops
         regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
@@ -124,10 +136,13 @@ runs:
             python .github/actions/scripts/process_values.py ${ENV}/${REGION}/versions.yaml ../argocd-gitops/review/${ENV}/${REGION}
           fi
         done
+        echo "Finished running Python script."
       shell: bash
 
     - name: Verify Helm Templates and Tags
       run: |
+        set -e
+        echo "Starting Helm template and tag verification..."
         cd argocd-gitops
         git diff --name-only | grep 'review/' > ../modified_files_raw.txt
 
@@ -158,16 +173,20 @@ runs:
             echo "Checking tag $tag for repository $repo in file $values_file"
           done
         done < ../modified_files.txt
+        echo "Finished Helm template and tag verification."
       shell: bash
 
     - name: Commit and Push Updates
       run: |
+        set -e
+        echo "Starting commit and push updates..."
         cd argocd-gitops
         git config user.email "your_email@example.com"
         git config user.name "Your Name"
         git add .
         git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
         git push
+        echo "Finished commit and push updates."
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
