@@ -38,7 +38,7 @@ runs:
           BRANCH=$(_jq '.branch')
 
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            echo "Checking out branch $BRANCH for $ENV/$REGION"
+            echo "Processing $ENV/$REGION"
             cd ${{ inputs.terraform_repo_path }}
             git fetch origin
             git checkout $BRANCH
@@ -48,6 +48,8 @@ runs:
             echo "Extracting MSA numbers for $ENV/$REGION from $MAIN_TF"
             grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > ../msa_numbers_${{ inputs.env_type }}_${REGION}.txt
             cd ..
+          else
+            echo "Skipping $ENV/$REGION as it does not match the env_type ${{ inputs.env_type }}"
           fi
         done
       shell: bash
@@ -83,6 +85,8 @@ runs:
                 fi
               fi
             done
+          else
+            echo "Skipping $ENV/$REGION as it does not match the env_type ${{ inputs.env_type }}"
           fi
         done
       shell: bash
@@ -97,17 +101,23 @@ runs:
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
+            echo "Running Python script for $ENV/$REGION"
             python ${{ inputs.review_gitops_path }}/.github/actions/scripts/process_values.py ${{ inputs.review_gitops_path }}/${ENV}/${REGION}/versions.yaml ${{ inputs.gitops_repo_path }}/review/${ENV}/${REGION}
+          else
+            echo "Skipping Python script for $ENV/$REGION as it does not match the env_type ${{ inputs.env_type }}"
           fi
         done
       shell: bash
 
     - name: Verify Helm Templates and Tags
       run: |
+        set -x
         cd ${{ inputs.gitops_repo_path }}
+        echo "running git diff.."
         git diff --name-only | grep 'review/' | sed "s|^|$(pwd)/|" > ../modified_files.txt
         cat ../modified_files.txt
-
+        
+        echo "running helm repo add.."
         helm repo add redon-chart-repo https://redon-cdn.s3.amazonaws.com/
         helm repo update
 
@@ -125,7 +135,7 @@ runs:
             fi
 
             echo "Checking tag $tag for repository $repo in file $values_file"
-            #aws ecr describe-images --repository-name $repo --image-ids imageTag=$tag || exit 1
+            # aws ecr describe-images --repository-name $repo --image-ids imageTag=$tag || exit 1
             echo "Tag $tag exists in ECR for repo $repo"
           done
         done < ../modified_files.txt
@@ -147,4 +157,4 @@ runs:
         git push
       shell: bash
       env:
-        GITHUB_TOKEN: ${{ inputs.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
