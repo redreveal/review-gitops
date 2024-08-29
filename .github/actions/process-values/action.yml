@@ -16,7 +16,7 @@ inputs:
   terraform_repo_path:
     description: 'Path to the Terraform repository'
     required: true
-  argocd_gitops_path:
+  gitops_repo_path:
     description: 'Path to the ArgoCD-GitOps repository'
     required: true
   github_token:
