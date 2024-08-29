@@ -55,7 +55,7 @@ runs:
 
     - name: Set Outputs
       run: |
-        echo "::set-output name=prod_changed::${{ steps.determine-env.outputs.prod_changed }}"
-        echo "::set-output name=dev_changed::${{ steps.determine-env.outputs.dev_changed }}"
-        echo "::set-output name=uat_changed::${{ steps.determine-env.outputs.uat_changed }}"
+        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}" >> $GITHUB_ENV
+        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}" >> $GITHUB_ENV
+        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}" >> $GITHUB_ENV
       shell: bash
