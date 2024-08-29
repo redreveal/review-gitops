@@ -13,6 +13,9 @@ jobs:
       dev_changed: ${{ steps.determine-environment.outputs.dev_changed }}
       uat_changed: ${{ steps.determine-environment.outputs.uat_changed }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
       - name: Determine Environment
         uses: ./.github/actions/determine-environments
 
@@ -28,6 +31,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
+
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
@@ -46,6 +50,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
+
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
@@ -65,6 +70,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
+
       - name: Setup Repositories
         uses: ./.github/actions/setup
         with:
