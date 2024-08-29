@@ -143,6 +143,9 @@ runs:
     
         echo "Listing contents of current directory:"
         ls -al
+        
+        echo "List of MSAs: "
+        cat msa_numbers_dev_us-east-1.txt
     
         echo "Changing directory to argocd-gitops..."
         cd argocd-gitops
