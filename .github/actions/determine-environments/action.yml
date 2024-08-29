@@ -1,0 +1,64 @@
+name: Determine Environment
+description: Determine which environments (prod, dev, uat) have changes based on modified files.
+outputs:
+  prod_changed:
+    description: "Indicates if files in the 'prod/' directory were changed"
+  dev_changed:
+    description: "Indicates if files in the 'dev/' directory were changed"
+  uat_changed:
+    description: "Indicates if files in the 'uat/' directory were changed"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Determine Environment Based on Modified Files
+      uses: actions/github-script@v5
+      with:
+        script: |
+          const payload = context.payload;
+          const repo = context.repo;
+          let base, head;
+
+          if (payload.pull_request) {
+            base = payload.pull_request.base.sha;
+            head = payload.pull_request.head.sha;
+          } else {
+            base = payload.before;
+            head = payload.after;
+          }
+
+          const compare = await github.rest.repos.compareCommits({
+            owner: repo.owner,
+            repo: repo.repo,
+            base: base,
+            head: head
+          });
+
+          let prod_changed = false;
+          let dev_changed = false;
+          let uat_changed = false;
+
+          compare.data.files.forEach(file => {
+            if (file.filename.startsWith('prod/')) {
+              prod_changed = true;
+            } else if (file.filename.startsWith('dev/')) {
+              dev_changed = true;
+            } else if (file.filename.startsWith('uat/')) {
+              uat_changed = true;
+            }
+          });
+
+          core.setOutput('prod_changed', prod_changed);
+          core.setOutput('dev_changed', dev_changed);
+          core.setOutput('uat_changed', uat_changed)
+      id: determine-env
+
+    - name: Set Outputs
+      run: |
+        echo "::set-output name=prod_changed::${{ steps.determine-env.outputs.prod_changed }}"
+        echo "::set-output name=dev_changed::${{ steps.determine-env.outputs.dev_changed }}"
+        echo "::set-output name=uat_changed::${{ steps.determine-env.outputs.uat_changed }}"
+      shell: bash
