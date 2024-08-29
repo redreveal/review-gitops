@@ -151,7 +151,7 @@ runs:
         pwd
     
         echo "Running git diff to find modified files..."
-        git diff --name-only | grep 'review/' > ../modified_files_raw.txt
+        git diff --name-only | grep 'review/' > ../modified_files_raw.txt || true
     
         echo "Checking if any files were modified..."
         if [ ! -s ../modified_files_raw.txt ]; then
@@ -188,6 +188,7 @@ runs:
     
         echo "Finished Helm template and tag verification."
       shell: bash
+
 
 
     - name: Commit and Push Updates
