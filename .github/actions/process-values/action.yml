@@ -115,13 +115,15 @@ runs:
         cd ${{ inputs.gitops_repo_path }}
     
         echo "Running git diff to find modified files..."
-        git diff --name-only | grep 'review/' | sed "s|^|$(pwd)/|" > ../modified_files.txt
+        git diff --name-only | grep 'review/' > ../modified_files_raw.txt
     
-        if [ ! -s ../modified_files.txt ]; then
+        if [ ! -s ../modified_files_raw.txt ]; then
           echo "No modified files found matching 'review/'. Exiting."
           exit 0
         fi
     
+        # Process the modified files to add the full path
+        sed "s|^|$(pwd)/|" ../modified_files_raw.txt > ../modified_files.txt
         cat ../modified_files.txt
         
         echo "Running helm repo add and update..."
@@ -148,6 +150,7 @@ runs:
           done
         done < ../modified_files.txt
       shell: bash
+
 
 
     - name: Show Differences
