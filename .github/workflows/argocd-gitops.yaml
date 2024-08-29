@@ -80,6 +80,7 @@ jobs:
           gitops_repo_path: 'argocd-gitops'
           terraform_repo_path: 'terraform'
           review_gitops_path: 'review-gitops'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   process-values-dev-uat:
     needs: determine-environment
@@ -107,3 +108,4 @@ jobs:
           gitops_repo_path: 'argocd-gitops'
           terraform_repo_path: 'terraform'
           review_gitops_path: 'review-gitops'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
