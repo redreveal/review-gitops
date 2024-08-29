@@ -96,7 +96,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   process-values-uat:
-    needs: [determine-environment, process-values-dev]
+    needs: determine-environment
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     steps:
