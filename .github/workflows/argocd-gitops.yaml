@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Repositories
-        uses: ./.github/actions/setup-repos
+        uses: ./.github/actions/setup
         with:
           review_gitops_path: 'review-gitops'
           terraform_repo_path: 'terraform'
@@ -117,7 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Repositories
-        uses: ./.github/actions/setup-repos
+        uses: ./.github/actions/setup
         with:
           review_gitops_path: 'review-gitops'
           terraform_repo_path: 'terraform'
