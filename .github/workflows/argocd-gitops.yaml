@@ -59,7 +59,7 @@ jobs:
             core.setOutput('uat_changed', uat_changed);
 
   process-values-production:
-    needs: determine-environment
+    needs: [determine-environment, process-values-dev]
     if: needs.determine-environment.outputs.prod_changed == 'true'
     runs-on: ubuntu-latest
     environment: production
@@ -96,7 +96,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   process-values-uat:
-    needs: determine-environment
+    needs: [determine-environment, process-values-dev]
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     steps:
