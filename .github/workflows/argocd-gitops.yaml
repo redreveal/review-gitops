@@ -103,7 +103,7 @@ jobs:
         uses: ./.github/actions/process-values
         with:
           env_type: 'dev-uat'
-          regions_envs_file: 'regions_envs.json'
+          regions_envs_file: 'review-gitops/regions_envs.json'
           msa_numbers_prefix: 'msa_numbers'
           gitops_repo_path: 'argocd-gitops'
           terraform_repo_path: 'terraform'
