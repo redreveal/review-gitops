@@ -147,20 +147,9 @@ runs:
     - name: Verify Helm Templates and Tags
       run: |
         set -e
-        echo "Current working directory:"
-        pwd
-    
-        echo "Listing contents of current directory:"
-        ls -al
-        
-        echo "List of MSAs: "
-        cat msa_numbers_dev_us-east-1.txt
     
         echo "Changing directory to argocd-gitops..."
         cd argocd-gitops
-    
-        echo "Current working directory after changing to argocd-gitops:"
-        pwd
     
         echo "Running git diff to find modified files..."
         git diff --name-only | grep 'review/' > ../modified_files_raw.txt || true
@@ -170,9 +159,6 @@ runs:
           echo "No modified files found matching 'review/'. Exiting."
           exit 0
         fi
-    
-        echo "Listing contents of modified_files_raw.txt:"
-        cat ../modified_files_raw.txt
     
         echo "Processing modified files..."
         sed "s|^|$(pwd)/|" ../modified_files_raw.txt > ../modified_files.txt
@@ -206,14 +192,12 @@ runs:
     - name: Commit and Push Updates
       run: |
         set -e
-        echo "Starting commit and push updates..."
         cd argocd-gitops
-        git config user.email "your_email@example.com"
-        git config user.name "Your Name"
+        git config user.email "rberisha@revealdata.com"
+        git config user.name "Redon Berisha"
         git add .
         git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
         git push
-        echo "Finished commit and push updates."
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
