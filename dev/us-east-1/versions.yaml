@@ -20,7 +20,3 @@ msas:
     review:
       services:
         search: 2024.7.12
-  91010003:
-    review:
-      services:
-        search: 2024.7.39
