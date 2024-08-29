@@ -112,8 +112,9 @@ runs:
     - name: Verify Helm Templates and Tags
       run: |
         set -x
+        pwd
         cd ${{ inputs.gitops_repo_path }}
-    
+        pwd
         echo "Running git diff to find modified files..."
         git diff --name-only | grep 'review/' > ../modified_files_raw.txt
     
