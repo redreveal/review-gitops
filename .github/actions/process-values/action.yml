@@ -16,7 +16,6 @@ runs:
       uses: actions/github-script@v5
       with:
         script: |
-          const { context, github } = require('@actions/github');
           const payload = context.payload;
           const repo = context.repo;
           let base, head;
