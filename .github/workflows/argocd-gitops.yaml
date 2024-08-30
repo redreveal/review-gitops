@@ -9,9 +9,9 @@ jobs:
   determine-environment:
     runs-on: ubuntu-latest
     outputs:
-      prod_changed: ${{ steps.determine-env.outputs.prod_changed }}
-      dev_changed: ${{ steps.determine-env.outputs.dev_changed }}
-      uat_changed: ${{ steps.determine-env.outputs.uat_changed }}
+      prod_changed: ${{ steps.determine-environment.outputs.prod_changed }}
+      dev_changed: ${{ steps.determine-environment.outputs.dev_changed }}
+      uat_changed: ${{ steps.determine-environment.outputs.uat_changed }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
