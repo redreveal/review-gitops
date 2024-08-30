@@ -9,21 +9,21 @@ jobs:
   determine-environment:
     runs-on: ubuntu-latest
     outputs:
-      prod_changed: ${{ steps.determine-environment.outputs.prod_changed }}
-      dev_changed: ${{ steps.determine-environment.outputs.dev_changed }}
-      uat_changed: ${{ steps.determine-environment.outputs.uat_changed }}
+      prod_changed: ${{ steps.determine-env.outputs.prod_changed }}
+      dev_changed: ${{ steps.determine-env.outputs.dev_changed }}
+      uat_changed: ${{ steps.determine-env.outputs.uat_changed }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
 
       - name: Determine Environment
-        id: determine-environment  # Make sure this ID is referenced correctly
+        id: determine-env
         uses: ./.github/actions/determine-environments
 
 
   process-values-production:
     needs: determine-environment
-    if: ${{ needs.determine-environment.outputs.prod_changed == 'true' }}
+    if: needs.determine-environment.outputs.prod_changed == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -43,7 +43,7 @@ jobs:
 
   process-values-dev:
     needs: determine-environment
-    if: ${{ needs.determine-environment.outputs.dev_changed == 'true' }}
+    if: needs.determine-environment.outputs.dev_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -62,7 +62,7 @@ jobs:
 
   process-values-uat:
     needs: determine-environment
-    if: ${{ needs.determine-environment.outputs.uat_changed == 'true' }}
+    if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     environment: uat
     steps:
