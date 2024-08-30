@@ -76,6 +76,34 @@ runs:
         echo "Finished MSA extraction."
       shell: bash
 
+    - name: Remove Symlinks for Current Overrides
+      run: |
+        set -e
+        echo "Starting to remove symlinks for current overrides..."
+        cd argocd-gitops
+        regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
+    
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+    
+          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
+            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+    
+            for MSA in $OVERRIDDEN_MSAS; do
+              FILE="review/${ENV}/${REGION}/$MSA.yaml"
+              if [ -L "$FILE" ]; then
+                echo "Removing symlink for overridden MSA $MSA in $FILE"
+                rm "$FILE"
+              fi
+            done
+          fi
+        done
+        echo "Finished removing symlinks for current overrides."
+      shell: bash
     - name: Run Python Script to Generate Values
       run: |
         set -e
@@ -99,10 +127,10 @@ runs:
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
         set -e
-        echo "Starting symlink handling..."
+        echo "Starting symlink handling after Python script..."
         cd argocd-gitops
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
-        
+    
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -119,20 +147,18 @@ runs:
               DEFAULT_VALUES_FILE="review/${ENV}/${REGION}/default_values.yaml"
     
               if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
-                if [ -L $FILE ]; then
-                  echo "Removing symlink for overridden MSA $MSA in $FILE"
-                  rm $FILE
-                else
-                  echo "File $FILE is overridden and correctly not a symlink."
+                if [ -L "$FILE" ]; then
+                  echo "Removing symlink for newly overridden MSA $MSA in $FILE"
+                  rm "$FILE"
                 fi
               else
-                if [ -f $FILE ] && [ ! -L $FILE ]; then
+                if [ -f "$FILE" ] && [ ! -L "$FILE" ]; then
                   echo "Converting $FILE back to a symlink to default_values.yaml"
-                  rm $FILE
-                  ln -sf ./default_values.yaml $FILE
-                elif [ ! -f $FILE ]; then
+                  rm "$FILE"
+                  ln -sf ./default_values.yaml "$FILE"
+                elif [ ! -f "$FILE" ]; then
                   echo "Creating symlink for $MSA to default_values.yaml"
-                  ln -sf ./default_values.yaml $FILE
+                  ln -sf ./default_values.yaml "$FILE"
                 else
                   echo "Symlink for $MSA already exists or is not needed."
                 fi
@@ -140,7 +166,7 @@ runs:
             done
           fi
         done
-        echo "Finished symlink handling."
+        echo "Finished symlink handling after Python script."
       shell: bash
 
     - name: Verify Helm Templates and Tags
