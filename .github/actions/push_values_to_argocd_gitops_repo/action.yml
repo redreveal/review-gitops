@@ -1,5 +1,5 @@
-# .github/actions/process-values/action.yml
-name: Process Values
+# .github/actions/push_values_to_argocd_gitops_repo/action.yml
+name: Push Values to ArgoCD GitOps Repo
 description: Handle MSA processing, run Python scripts, and verify Helm templates
 inputs:
   env_type:
