@@ -54,8 +54,13 @@ runs:
           core.setOutput('uat_changed', uat_changed)
 
     - name: Set Outputs
+      id: set-outputs
       run: |
-        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}" >> $GITHUB_ENV
-        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}" >> $GITHUB_ENV
-        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}" >> $GITHUB_ENV
+        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}"
+        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}"
+        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}"
+      outputs:
+        prod_changed: ${{ steps.determine-env.outputs.prod_changed }}
+        dev_changed: ${{ steps.determine-env.outputs.dev_changed }}
+        uat_changed: ${{ steps.determine-env.outputs.uat_changed }}
       shell: bash
