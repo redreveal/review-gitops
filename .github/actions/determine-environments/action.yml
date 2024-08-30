@@ -15,7 +15,7 @@ runs:
       uses: actions/checkout@v2
 
     - name: Determine Environment Based on Modified Files
-      id: determine-env
+      id: determine-environment
       uses: actions/github-script@v5
       with:
         script: |
@@ -58,7 +58,7 @@ runs:
 
     - name: Set Outputs
       run: |
-        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}" >> $GITHUB_OUTPUT
-        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}" >> $GITHUB_OUTPUT
-        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}" >> $GITHUB_OUTPUT
+        echo "prod_changed=${{ steps.determine-environment.outputs.prod_changed }}" >> $GITHUB_OUTPUT
+        echo "dev_changed=${{ steps.determine-environment.outputs.dev_changed }}" >> $GITHUB_OUTPUT
+        echo "uat_changed=${{ steps.determine-environment.outputs.uat_changed }}" >> $GITHUB_OUTPUT
       shell: bash

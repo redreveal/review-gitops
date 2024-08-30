@@ -20,12 +20,6 @@ jobs:
         id: determine-environment  # Make sure this ID is referenced correctly
         uses: ./.github/actions/determine-environments
 
-      - name: Debug Outputs
-        run: |
-          echo "prod_changed: ${{ needs.determine-environment.outputs.prod_changed }}"
-          echo "dev_changed: ${{ needs.determine-environment.outputs.dev_changed }}"
-          echo "uat_changed: ${{ needs.determine-environment.outputs.uat_changed }}"
-
 
   process-values-production:
     needs: determine-environment
