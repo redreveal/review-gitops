@@ -13,6 +13,9 @@ jobs:
       dev_changed: ${{ steps.determine-env.outputs.dev_changed }}
       uat_changed: ${{ steps.determine-env.outputs.uat_changed }}
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
       - name: Determine Environment
         uses: ./.github/actions/determine-environments
 
