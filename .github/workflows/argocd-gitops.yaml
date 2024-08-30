@@ -17,15 +17,12 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Determine Environment
-        id: determine-environment
+        id: determine-environment  # Make sure this ID is referenced correctly
         uses: ./.github/actions/determine-environments
-
-      - name: Setup Dependencies
-        uses: ./.github/actions/dependencies
 
   process-values-production:
     needs: determine-environment
-    if: needs.determine-environment.outputs.prod_changed == 'true'
+    if: ${{ needs.determine-environment.outputs.prod_changed == 'true' }}
     runs-on: ubuntu-latest
     environment: production
     steps:
