@@ -18,6 +18,8 @@ jobs:
       - name: Determine Environment
         id: determine-environment
         uses: ./.github/actions/determine-environments
+      - name: Setup Dependencies
+        uses: ./.github/actions/dependencies
 
 
   process-values-production:
