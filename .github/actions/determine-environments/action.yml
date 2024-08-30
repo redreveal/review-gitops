@@ -1,16 +1,22 @@
 name: Determine Environment
-description: Determine which environments (prod, dev, uat) have changes based on modified files.
+description: Determine which environments (dev, uat, prod) have changes based on modified files.
 outputs:
   prod_changed:
     description: "Indicates if files in the 'prod/' directory were changed"
+    value: ${{ steps.determine-env.outputs.prod_changed }}
   dev_changed:
     description: "Indicates if files in the 'dev/' directory were changed"
+    value: ${{ steps.determine-env.outputs.dev_changed }}
   uat_changed:
     description: "Indicates if files in the 'uat/' directory were changed"
+    value: ${{ steps.determine-env.outputs.uat_changed }}
 
 runs:
   using: "composite"
   steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
     - name: Determine Environment Based on Modified Files
       id: determine-env
       uses: actions/github-script@v5
@@ -52,10 +58,3 @@ runs:
           core.setOutput('prod_changed', prod_changed);
           core.setOutput('dev_changed', dev_changed);
           core.setOutput('uat_changed', uat_changed);
-
-    - name: Set Outputs
-      run: |
-        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}" >> $GITHUB_OUTPUT
-        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}" >> $GITHUB_OUTPUT
-        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}" >> $GITHUB_OUTPUT
-      shell: bash
