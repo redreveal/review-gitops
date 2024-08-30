@@ -45,7 +45,7 @@ jobs:
 
   process-values-dev:
     needs: determine-environment
-    if: needs.determine-environment.outputs.dev_changed == 'true'
+    if: ${{ needs.determine-environment.outputs.dev_changed == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -64,7 +64,7 @@ jobs:
 
   process-values-uat:
     needs: determine-environment
-    if: needs.determine-environment.outputs.uat_changed == 'true'
+    if: ${{ needs.determine-environment.outputs.uat_changed == 'true' }}
     runs-on: ubuntu-latest
     environment: uat
     steps:
