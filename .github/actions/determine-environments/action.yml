@@ -54,13 +54,8 @@ runs:
           core.setOutput('uat_changed', uat_changed)
 
     - name: Set Outputs
-      id: set-outputs
       run: |
-        echo "prod_changed=${{ steps.determine-env.outputs.prod_changed }}"
-        echo "dev_changed=${{ steps.determine-env.outputs.dev_changed }}"
-        echo "uat_changed=${{ steps.determine-env.outputs.uat_changed }}"
-      outputs:
-        prod_changed: ${{ steps.determine-env.outputs.prod_changed }}
-        dev_changed: ${{ steps.determine-env.outputs.dev_changed }}
-        uat_changed: ${{ steps.determine-env.outputs.uat_changed }}
+        echo "::set-output name=prod_changed::${{ steps.determine-env.outputs.prod_changed }}"
+        echo "::set-output name=dev_changed::${{ steps.determine-env.outputs.dev_changed }}"
+        echo "::set-output name=uat_changed::${{ steps.determine-env.outputs.uat_changed }}"
       shell: bash
