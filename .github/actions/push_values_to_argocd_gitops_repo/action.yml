@@ -76,6 +76,26 @@ runs:
         echo "Finished MSA extraction."
       shell: bash
 
+    - name: Run Python Script to Generate Values
+      run: |
+        set -e
+        echo "Starting Python script to generate values..."
+        cd review-gitops
+        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
+            echo "Running Python script for $ENV/$REGION"
+            python .github/actions/scripts/process_values.py ${ENV}/${REGION}/versions.yaml ../argocd-gitops/review/${ENV}/${REGION}
+          fi
+        done
+        echo "Finished running Python script."
+      shell: bash
+
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
         set -e
@@ -123,27 +143,6 @@ runs:
         echo "Finished symlink handling."
       shell: bash
 
-
-    - name: Run Python Script to Generate Values
-      run: |
-        set -e
-        echo "Starting Python script to generate values..."
-        cd review-gitops
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            echo "Running Python script for $ENV/$REGION"
-            python .github/actions/scripts/process_values.py ${ENV}/${REGION}/versions.yaml ../argocd-gitops/review/${ENV}/${REGION}
-          fi
-        done
-        echo "Finished running Python script."
-      shell: bash
-
     - name: Verify Helm Templates and Tags
       run: |
         set -e
@@ -186,8 +185,6 @@ runs:
     
         echo "Finished Helm template and tag verification."
       shell: bash
-
-
 
     - name: Commit and Push Updates
       run: |
