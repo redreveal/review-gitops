@@ -6,17 +6,6 @@ defaults:
     default: 2024.7.31
     services:
       search: 2024.7.32
-      search_new: 2024.7.1
+      assignment: 2024.7.1
   reveal_ai:
     default: 2024.7.19
-msas:
-  91010000:
-    review:
-      services:
-        search: 2024.7.125
-        documentloader: latest
-        export: latest
-  91010001:
-    review:
-      services:
-        search: 2024.7.11
