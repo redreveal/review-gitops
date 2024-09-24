@@ -82,17 +82,20 @@ runs:
         echo "Starting to remove symlinks for current overrides..."
         cd argocd-gitops
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
-    
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-    
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
-    
+            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
+
+            if [[ -z "$OVERRIDDEN_MSAS" ]]; then
+              echo "No MSAs overridden for $ENV/$REGION. Skipping symlink removal."
+              continue
+            fi
+
             for MSA in $OVERRIDDEN_MSAS; do
               FILE="review/${ENV}/${REGION}/$MSA.yaml"
               if [ -L "$FILE" ]; then
@@ -104,6 +107,7 @@ runs:
         done
         echo "Finished removing symlinks for current overrides."
       shell: bash
+
     - name: Run Python Script to Generate Values
       run: |
         set -e
