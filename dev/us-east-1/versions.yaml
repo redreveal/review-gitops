@@ -9,3 +9,14 @@ defaults:
       assignment: 2024.7.1
   reveal_ai:
     default: 2024.7.22
+msas:
+  91010000:
+    review:
+      services:
+        search: 2024.7.125
+        documentloader: latest
+        export: latest
+  91010001:
+    review:
+      services:
+        search: 2024.7.11
