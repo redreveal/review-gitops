@@ -91,34 +91,27 @@ runs:
           ENV=$(_jq '.env')
 
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            # Check if 'msas' field exists and is not empty or null
-            msas_exists=$(yq eval '.msas != null and .msas != {}' ../review-gitops/${ENV}/${REGION}/versions.yaml)
+            # Attempt to fetch MSAs, if no MSAs exist set OVERRIDDEN_MSAS to empty
+            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
 
-            if [[ "$msas_exists" == "false" ]]; then
-              echo "No MSAs found for $ENV/$REGION. Skipping symlink removal."
-              continue
-            fi
-
-            # Fetch overridden MSAs if 'msas' field is non-empty
-            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
-
-            # If OVERRIDDEN_MSAS is empty, skip this region's symlink removal
+            # High-level check: If OVERRIDDEN_MSAS is empty, skip this region's symlink removal
             if [[ -z "$OVERRIDDEN_MSAS" ]]; then
               echo "No MSAs overridden for $ENV/$REGION. Skipping symlink removal."
-              continue
+            else
+              echo "Processing overridden MSAs for $ENV/$REGION..."
+              for MSA in $OVERRIDDEN_MSAS; do
+                FILE="review/${ENV}/${REGION}/$MSA.yaml"
+                if [ -L "$FILE" ]; then
+                  echo "Removing symlink for overridden MSA $MSA in $FILE"
+                  rm "$FILE"
+                fi
+              done
             fi
-
-            for MSA in $OVERRIDDEN_MSAS; do
-              FILE="review/${ENV}/${REGION}/$MSA.yaml"
-              if [ -L "$FILE" ]; then
-                echo "Removing symlink for overridden MSA $MSA in $FILE"
-                rm "$FILE"
-              fi
-            done
           fi
         done
         echo "Finished removing symlinks for current overrides."
       shell: bash
+
 
 
     - name: Run Python Script to Generate Values
