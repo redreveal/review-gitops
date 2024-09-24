@@ -89,8 +89,7 @@ runs:
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
-
+            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
             if [[ -z "$OVERRIDDEN_MSAS" ]]; then
               echo "No MSAs overridden for $ENV/$REGION. Skipping symlink removal."
               continue
@@ -107,6 +106,7 @@ runs:
         done
         echo "Finished removing symlinks for current overrides."
       shell: bash
+
 
     - name: Run Python Script to Generate Values
       run: |
