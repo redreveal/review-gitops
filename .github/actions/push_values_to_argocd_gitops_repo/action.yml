@@ -89,16 +89,17 @@ runs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
+
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            # Check if 'msas' field exists and is not null before proceeding
-            msas_exists=$(yq eval 'has("msas")' ../review-gitops/${ENV}/${REGION}/versions.yaml)
+            # Check if 'msas' field exists and is not empty or null
+            msas_exists=$(yq eval '.msas != null and .msas != {}' ../review-gitops/${ENV}/${REGION}/versions.yaml)
 
             if [[ "$msas_exists" == "false" ]]; then
-              echo "No MSAs field found for $ENV/$REGION. Skipping symlink removal."
+              echo "No MSAs found for $ENV/$REGION. Skipping symlink removal."
               continue
             fi
 
-            # Fetch overridden MSAs if 'msas' field exists
+            # Fetch overridden MSAs if 'msas' field is non-empty
             OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
 
             # If OVERRIDDEN_MSAS is empty, skip this region's symlink removal
@@ -118,6 +119,7 @@ runs:
         done
         echo "Finished removing symlinks for current overrides."
       shell: bash
+
 
     - name: Run Python Script to Generate Values
       run: |
