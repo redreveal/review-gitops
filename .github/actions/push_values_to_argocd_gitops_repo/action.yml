@@ -82,6 +82,7 @@ runs:
         echo "Starting to remove symlinks for current overrides..."
         cd argocd-gitops
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
+
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
@@ -89,7 +90,18 @@ runs:
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
+            # Check if 'msas' field exists and is not null before proceeding
+            msas_exists=$(yq eval 'has("msas")' ../review-gitops/${ENV}/${REGION}/versions.yaml)
+
+            if [[ "$msas_exists" == "false" ]]; then
+              echo "No MSAs field found for $ENV/$REGION. Skipping symlink removal."
+              continue
+            fi
+
+            # Fetch overridden MSAs if 'msas' field exists
+            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
+
+            # If OVERRIDDEN_MSAS is empty, skip this region's symlink removal
             if [[ -z "$OVERRIDDEN_MSAS" ]]; then
               echo "No MSAs overridden for $ENV/$REGION. Skipping symlink removal."
               continue
@@ -106,7 +118,6 @@ runs:
         done
         echo "Finished removing symlinks for current overrides."
       shell: bash
-
 
     - name: Run Python Script to Generate Values
       run: |
