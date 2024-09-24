@@ -91,7 +91,6 @@ runs:
           ENV=$(_jq '.env')
 
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            # Attempt to fetch MSAs, if no MSAs exist set OVERRIDDEN_MSAS to empty
             OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
 
             # High-level check: If OVERRIDDEN_MSAS is empty, skip this region's symlink removal
@@ -140,23 +139,23 @@ runs:
         echo "Starting symlink handling after Python script..."
         cd argocd-gitops
         regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
-    
+
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-    
+
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
             ALL_MSAS=$(cat ../msa_numbers_${{ inputs.env_type }}_${REGION}.txt | sort -u)
-            OVERRIDDEN_MSAS=$(yq eval '.msas | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+')
-    
+            OVERRIDDEN_MSAS=$(yq eval '.msas // {} | keys' ../review-gitops/${ENV}/${REGION}/versions.yaml | grep -o '[0-9]\+' || true)
+
             for MSA in $ALL_MSAS; do
               FILE="review/${ENV}/${REGION}/$MSA.yaml"
               DEFAULT_VALUES_FILE="review/${ENV}/${REGION}/default_values.yaml"
-    
-              if echo "$OVERRIDDEN_MSAS" | grep -q "$MSA"; then
+
+              if [[ -n "$OVERRIDDEN_MSAS" ]] && echo "$OVERRIDDEN_MSAS" | grep -q "^$MSA$"; then
                 if [ -L "$FILE" ]; then
                   echo "Removing symlink for newly overridden MSA $MSA in $FILE"
                   rm "$FILE"
@@ -178,6 +177,7 @@ runs:
         done
         echo "Finished symlink handling after Python script."
       shell: bash
+
 
     - name: Verify Helm Templates and Tags
       run: |
