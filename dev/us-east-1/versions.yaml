@@ -8,4 +8,4 @@ defaults:
       search: 2024.7.32
       assignment: 2024.7.1
   reveal_ai:
-    default: 2024.7.20
+    default: 2024.7.21
