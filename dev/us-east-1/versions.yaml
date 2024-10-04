@@ -12,8 +12,8 @@ defaults:
 msas:
   91010000:
     review:
+      default: emay
       services:
-        default: emay
         search: 2024.7.125
         documentloader: latest
         export: latest
