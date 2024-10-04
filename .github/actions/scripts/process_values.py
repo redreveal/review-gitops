@@ -48,11 +48,16 @@ def process_versions(version_file_path, output_dir):
         for component, component_data in msa_data.items():
             component_key = f"default_{component}"
 
+            msa_default_version = component_data.get('default')
+            if msa_default_version:
+                msa_values['versions'][component_key] = msa_default_version
+                for service in default_values['services'].keys():
+                    if service.startswith(component):  # Override all services under the same component
+                        msa_values['services'][service] = {'tag': msa_default_version}
+
             if 'services' in component_data:
                 for service, version in component_data['services'].items():
                     msa_values['services'][service] = {'tag': version}
-            if 'default' in component_data:
-                msa_values['versions'][component_key] = component_data['default']
 
         """
         Generated {msa}.yaml files will be overriding the symlinks, which means these MSAs have overrides and different values from default_values.yaml
