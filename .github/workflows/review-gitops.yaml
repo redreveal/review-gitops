@@ -61,7 +61,7 @@ jobs:
         if [[ -f msa_numbers.txt ]]; then
           cat msa_numbers.txt
         else
-          for REGION in "${regions[@]}";; do
+          for REGION in "${regions[@]}"; do
             echo "MSAs for region $REGION:"
             cat msa_numbers_${REGION}.txt
           done
@@ -78,7 +78,7 @@ jobs:
             fi
           done
         else
-          for REGION in "${regions[@]}";; do
+          for REGION in "${regions[@]}"; do
             MSAS=$(cat msa_numbers_${REGION}.txt)
             for MSA in $MSAS; do
               echo "Processing MSA $MSA for region $REGION"
