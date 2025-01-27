@@ -24,6 +24,13 @@ jobs:
         ref: "${{ steps.extract_payload.outputs.branch }}"
         path: terraform
 
+    - name: Checkout ArgoCD-GitOps
+      uses: actions/checkout@v2
+      with:
+        repository: redreveal/argocd-gitops-versions
+        token: ${{ secrets.TOKEN }}
+        path: argocd-gitops
+
     - name: Determine Directory and Extract MSA Numbers
       run: |
         BRANCH_NAME="${{ steps.extract_payload.outputs.branch }}"
@@ -33,15 +40,20 @@ jobs:
           MAIN_TF="dev/us-east-1/99_clients/main.tf"
           grep 'module.MSA' terraform/$MAIN_TF | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
         elif [[ "$BRANCH_NAME" == "uat" ]]; then
-          DIRECTORY="argocd-gitops/review/uat/eu-west-1"
-          MAIN_TF="uat/eu-west-1/99_clients/main.tf"
+          DIRECTORY="argocd-gitops/review/dev/eu-west-1"
+          MAIN_TF="dev/eu-west-1/99_clients/main.tf"
           grep 'module.MSA' terraform/$MAIN_TF | egrep -o '[0-9]+' | sort -u > msa_numbers.txt
         elif [[ "$BRANCH_NAME" == "production" ]]; then
           DIRECTORY="argocd-gitops/review/prod"
           MAIN_TF_PATTERN="prod/*/99_clients/main.tf"
+          regions=()
           for MAIN_TF in $(find terraform -path "terraform/$MAIN_TF_PATTERN"); do
             REGION=$(echo $MAIN_TF | awk -F'/' '{print $3}')
+            if [[ "$REGION" == "region_template ]]; then
+                continue
+            fi
             grep 'module.MSA' $MAIN_TF | egrep -o '[0-9]+' | sort -u > msa_numbers_${REGION}.txt
+            regions+=($REGION)
           done
         fi
 
@@ -49,21 +61,12 @@ jobs:
         if [[ -f msa_numbers.txt ]]; then
           cat msa_numbers.txt
         else
-          for REGION in $(find terraform/prod -maxdepth 1 -mindepth 1 -type d -exec basename {} \;); do
+          for REGION in "${regions[@]"; do
             echo "MSAs for region $REGION:"
             cat msa_numbers_${REGION}.txt
           done
         fi
-
-    - name: Checkout ArgoCD-GitOps
-      uses: actions/checkout@v2
-      with:
-        repository: redreveal/argocd-gitops-versions
-        token: ${{ secrets.TOKEN }}
-        path: argocd-gitops
-
-    - name: Create Symlinks for New MSAs
-      run: |
+        
         if [[ -f msa_numbers.txt ]]; then
           MSAS=$(cat msa_numbers.txt)
           for MSA in $MSAS; do
@@ -76,7 +79,7 @@ jobs:
             fi
           done
         else
-          for REGION in $(find terraform/prod -maxdepth 1 -mindepth 1 -type d -exec basename {} \;); do
+          for REGION in "${regions[@]"; do
             MSAS=$(cat msa_numbers_${REGION}.txt)
             for MSA in $MSAS; do
               echo "Processing MSA $MSA for region $REGION"
@@ -90,13 +93,42 @@ jobs:
           done
         fi
 
-    - name: Commit and Push
+#    - name: Create Symlinks for New MSAs
+#      run: |
+#        if [[ -f msa_numbers.txt ]]; then
+#          MSAS=$(cat msa_numbers.txt)
+#          for MSA in $MSAS; do
+#            echo "Processing MSA $MSA"
+#            DIRECTORY="${{ env.DIRECTORY }}"
+#            FILE="$DIRECTORY/$MSA.yaml"
+#            mkdir -p $DIRECTORY
+#            if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+#              ln -sf ./default_values.yaml $FILE
+#            fi
+#          done
+#        else
+#          for REGION in $(find terraform/prod -maxdepth 1 -mindepth 1 -type d -exec basename {} \;); do
+#            MSAS=$(cat msa_numbers_${REGION}.txt)
+#            for MSA in $MSAS; do
+#              echo "Processing MSA $MSA for region $REGION"
+#              DIRECTORY="argocd-gitops/review/prod/$REGION"
+#              FILE="$DIRECTORY/$MSA.yaml"
+#              mkdir -p $DIRECTORY
+#              if [ ! -L $FILE ] && [ ! -f $FILE ]; then
+#                ln -sf ./default_values.yaml $FILE
+#              fi
+#            done
+#          done
+#        fi
+
+    - name: Commit and Push Updates
       run: |
+        set -e
         cd argocd-gitops
-        git config user.email "rberisha@revealdata.com"
-        git config user.name "Redon Berisha"
+        git config user.email "sre-team@revealdata.com"
+        git config user.name "SRE team"
         git add .
-        git commit -m "Added symlinks for new MSAs" || echo "No changes to commit"
+        git commit -m "Updated from Review-GitOps" || echo "No changes to commit"
         git push
       env:
         GITHUB_TOKEN: ${{ secrets.TOKEN }}
