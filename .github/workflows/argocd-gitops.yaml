@@ -61,6 +61,7 @@ jobs:
         with:
           env_type: 'dev'
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
   push_uat_values_to_argocd:
     needs: determine-environment
@@ -81,3 +82,4 @@ jobs:
         with:
           env_type: 'uat'
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
