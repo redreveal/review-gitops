@@ -41,6 +41,7 @@ jobs:
         with:
           env_type: 'prod'
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
   push_dev_values_to_argocd:
     needs: determine-environment

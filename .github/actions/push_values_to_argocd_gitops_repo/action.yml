@@ -8,6 +8,9 @@ inputs:
   github_token:
     description: 'GitHub token for pushing changes'
     required: true
+  slack_webhook:
+    description: 'Slack webhook for notifications'
+    required: false
 
 runs:
   using: "composite"
@@ -131,9 +134,9 @@ runs:
           fi
         done
         echo "Finished running Python script."
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
       shell: bash
+      env:
+        SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
 
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
       run: |
