@@ -238,7 +238,7 @@ runs:
           }
           REGION=$(_jq '.region')
           ENV=$(_jq '.env')
-          STYLE = "auto"
+          STYLE="auto"
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
             echo "Running Python script for $ENV/$REGION"
             python .github/actions/scripts/slack_message.py ${ENV}/${REGION}/versions.yaml "$ENV" "$REGION" "$STYLE"
