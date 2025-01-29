@@ -227,27 +227,27 @@ runs:
         echo "Finished Helm template and tag verification."
       shell: bash
 
-    - name: Send Slack Notification
-      run: |
-        set -e
-        cd review-gitops
-        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
-        for region_env in $regions_envs; do
-          _jq() {
-            echo ${region_env} | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-          STYLE="auto"
-          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
-            echo "Running Python script for $ENV/$REGION"
-            python .github/actions/scripts/slack_message.py ${ENV}/${REGION}/versions.yaml "$ENV" "$REGION" "$STYLE"
-          fi
-        done
-        echo "Finished running Python script."
-      shell: bash
-      env:
-        SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
+#    - name: Send Slack Notification
+#      run: |
+#        set -e
+#        cd review-gitops
+#        regions_envs=$(cat regions_envs.json | jq -r '.[] | @base64')
+#        for region_env in $regions_envs; do
+#          _jq() {
+#            echo ${region_env} | base64 --decode | jq -r ${1}
+#          }
+#          REGION=$(_jq '.region')
+#          ENV=$(_jq '.env')
+#          STYLE="auto"
+#          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
+#            echo "Running Python script for $ENV/$REGION"
+#            python .github/actions/scripts/slack_message.py ${ENV}/${REGION}/versions.yaml "$ENV" "$REGION" "$STYLE"
+#          fi
+#        done
+#        echo "Finished running Python script."
+#      shell: bash
+#      env:
+#        SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
 
     - name: Commit and Push Updates
       run: |

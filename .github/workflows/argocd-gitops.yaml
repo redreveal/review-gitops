@@ -43,6 +43,12 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
+      - name: Slack Notify Summaries
+        uses: ./.github/actions/gitops_slack_notify
+        with:
+          env_type: 'prod'
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
   push_dev_values_to_argocd:
     needs: determine-environment
     if: needs.determine-environment.outputs.dev_changed == 'true'
@@ -61,6 +67,12 @@ jobs:
         with:
           env_type: 'dev'
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack Notify Summaries
+        uses: ./.github/actions/gitops_slack_notify
+        with:
+          env_type: 'dev'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
   push_uat_values_to_argocd:
@@ -82,4 +94,10 @@ jobs:
         with:
           env_type: 'uat'
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack Notify Summaries
+        uses: ./.github/actions/gitops_slack_notify
+        with:
+          env_type: 'uat'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}

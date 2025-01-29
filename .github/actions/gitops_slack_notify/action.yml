@@ -1,0 +1,49 @@
+name: GitOps Slack Notify
+description: Summarize changes from region_envs.json and call a Python script for Slack notifications
+
+inputs:
+  env_type:
+    description: "Environment type (prod, dev, uat)"
+    required: true
+
+  slack_webhook:
+    description: "Slack Webhook"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout if needed
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+      shell: bash
+
+    - name: Slack Notify Python Script
+      # Optionally set environment
+      env:
+        SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
+      run: |
+        set -e
+        echo "Reading region_envs.json and calling python script..."
+        # Example logic: read region_envs.json, for each region, call the script
+        # (You can rename 'slack_notify.py' to whatever you want)
+        regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
+        for region_env in $regions_envs; do
+          _jq() {
+            echo ${region_env} | base64 --decode | jq -r ${1}
+          }
+
+          REGION=$(_jq '.region')
+          ENV=$(_jq '.env')
+          STYLE="auto"
+
+          # Only call the Python script if the environment matches the env_type
+          if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
+            echo "Processing env=$ENV region=$REGION"
+            python slack_notify.py "$ENV" "$REGION" "$STYLE"
+          fi
+        done
+      shell: bash
