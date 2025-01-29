@@ -69,58 +69,58 @@ def process_versions(version_file_path, output_dir):
         print(f"Generated {msa_file_path}")
         return versions_data
 
-def build_slack_message(versions_data, version_file_path):
-    """
-    Build a Slack-friendly text summary of what's in versions.yaml.
-    """
-    defaults = versions_data.get('defaults', {})
-    msas = versions_data.get('msas', {})
+# def build_slack_message(versions_data, version_file_path):
+#     """
+#     Build a Slack-friendly text summary of what's in versions.yaml.
+#     """
+#     defaults = versions_data.get('defaults', {})
+#     msas = versions_data.get('msas', {})
+#
+#     lines = []
+#     lines.append(f":bell: *Review-GitOps Update for* `{version_file_path}`")
+#
+#     # Summarize defaults
+#     lines.append("\n*Defaults:*")
+#     for component, comp_data in defaults.items():
+#         default_ver = comp_data.get('default', 'N/A')
+#         lines.append(f" - *{component}* default = `{default_ver}`")
+#
+#         # Show per-service versions if any
+#         for svc, svc_ver in comp_data.get('services', {}).items():
+#             lines.append(f"   - service `{svc}` = `{svc_ver}`")
+#
+#     # Summarize MSA overrides
+#     if msas:
+#         lines.append("\n*MSA Overrides:*")
+#         for msa, override_data in msas.items():
+#             lines.append(f" - MSA `{msa}`:")
+#             for comp, comp_values in override_data.items():
+#                 lines.append(f"   - Component: `{comp}`")
+#                 if 'default' in comp_values:
+#                     lines.append(f"     - default override = `{comp_values['default']}`")
+#                 for svc, svc_ver in comp_values.get('services', {}).items():
+#                     lines.append(f"     - service `{svc}` = `{svc_ver}`")
+#     else:
+#         lines.append("\nNo MSA overrides found.")
+#
+#     return "\n".join(lines)
 
-    lines = []
-    lines.append(f":bell: *Review-GitOps Update for* `{version_file_path}`")
-
-    # Summarize defaults
-    lines.append("\n*Defaults:*")
-    for component, comp_data in defaults.items():
-        default_ver = comp_data.get('default', 'N/A')
-        lines.append(f" - *{component}* default = `{default_ver}`")
-
-        # Show per-service versions if any
-        for svc, svc_ver in comp_data.get('services', {}).items():
-            lines.append(f"   - service `{svc}` = `{svc_ver}`")
-
-    # Summarize MSA overrides
-    if msas:
-        lines.append("\n*MSA Overrides:*")
-        for msa, override_data in msas.items():
-            lines.append(f" - MSA `{msa}`:")
-            for comp, comp_values in override_data.items():
-                lines.append(f"   - Component: `{comp}`")
-                if 'default' in comp_values:
-                    lines.append(f"     - default override = `{comp_values['default']}`")
-                for svc, svc_ver in comp_values.get('services', {}).items():
-                    lines.append(f"     - service `{svc}` = `{svc_ver}`")
-    else:
-        lines.append("\nNo MSA overrides found.")
-
-    return "\n".join(lines)
-
-def post_to_slack(slack_webhook, message):
-    """
-    Posts the given message to Slack using the provided webhook.
-    """
-    payload = {"text": message}
-    headers = {"Content-Type": "application/json"}
-
-    try:
-        resp = requests.post(slack_webhook, headers=headers, data=json.dumps(payload))
-        resp.raise_for_status()
-        print("Slack message posted successfully.")
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to post message to Slack: {e}")
-        # Depending on your preference, you might want to exit non-zero
-        # to fail the workflow if Slack fails.
-        # sys.exit(1)
+# def post_to_slack(slack_webhook, message):
+#     """
+#     Posts the given message to Slack using the provided webhook.
+#     """
+#     payload = {"text": message}
+#     headers = {"Content-Type": "application/json"}
+#
+#     try:
+#         resp = requests.post(slack_webhook, headers=headers, data=json.dumps(payload))
+#         resp.raise_for_status()
+#         print("Slack message posted successfully.")
+#     except requests.exceptions.RequestException as e:
+#         print(f"Failed to post message to Slack: {e}")
+#         # Depending on your preference, you might want to exit non-zero
+#         # to fail the workflow if Slack fails.
+#         # sys.exit(1)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -130,11 +130,11 @@ if __name__ == "__main__":
     version_file_path = sys.argv[1]
     output_dir = sys.argv[2]
     versions_data = process_versions(version_file_path, output_dir)
-    slack_message = build_slack_message(versions_data, version_file_path)
-
-    slack_webhook = os.getenv("SLACK_WEBHOOK", None)
-    if slack_webhook:
-        post_to_slack(slack_webhook, slack_message)
-    else:
-        print("SLACK_WEBHOOK env var not found. Skipping Slack post.")
-        # Or exit(1) if you consider it mandatory
+    # slack_message = build_slack_message(versions_data, version_file_path)
+    #
+    # slack_webhook = os.getenv("SLACK_WEBHOOK", None)
+    # if slack_webhook:
+    #     post_to_slack(slack_webhook, slack_message)
+    # else:
+    #     print("SLACK_WEBHOOK env var not found. Skipping Slack post.")
+    #     # Or exit(1) if you consider it mandatory
