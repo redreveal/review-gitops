@@ -3,7 +3,7 @@ defaults:
   processing:
     default: 2024.7.20
   review:
-    default: 2024.7.32
+    default: 2024.7.33
     services:
       search: 2024.7.32
       assignment: 2024.7.1
