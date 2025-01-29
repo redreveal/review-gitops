@@ -1,6 +1,8 @@
 import yaml
 import os
 import sys
+import requests
+import json
 
 
 def read_yaml(file_path):
