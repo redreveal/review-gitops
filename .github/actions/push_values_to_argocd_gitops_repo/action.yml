@@ -131,6 +131,8 @@ runs:
           fi
         done
         echo "Finished running Python script."
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
       shell: bash
 
     - name: Handle Symlinks for Overridden and Non-Overridden MSAs
