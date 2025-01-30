@@ -3,7 +3,7 @@ name: Revealai-GitOps Workflow
 on:
   push:
     paths:
-      - 'rai/**/'
+      - 'RAI/**/'
 
 
 jobs:
