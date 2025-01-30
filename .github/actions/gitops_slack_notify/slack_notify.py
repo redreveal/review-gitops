@@ -186,7 +186,7 @@ def main():
     # slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|Open Filtered ArgoCD>"
 
     # Otherwise, just display the base link
-    slack_message += f"\n\n:point_right: *ArgoCD:* <{argocd_url}|Open ArgoCD for {region}>\n"
+    slack_message += f"\n\n:point_right: *ArgoCD:* <{argocd_url}|ArgoCD URL for {region}>\n"
 
     # Optionally add a separator if you are sending multiple messages
     slack_message += "\n---\n"
