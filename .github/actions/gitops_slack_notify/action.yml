@@ -30,7 +30,7 @@ runs:
         echo "Reading region_envs.json and calling python script..."
         # Example logic: read region_envs.json, for each region, call the script
         # (You can rename 'slack_notify.py' to whatever you want)
-        regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
+        regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
