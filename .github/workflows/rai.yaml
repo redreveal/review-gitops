@@ -42,7 +42,7 @@ jobs:
       -  uses: actions/checkout@v2
          with:
           repository: redreveal/argocd-gitops-versions
-          token: ${{ inputs.repo_token }}
+          token: ${{ secrets.TOKEN }}
           path: argocd-gitops
 
       - name: Copy Files from revealai-gitops/RAI to argocd-gitops-versions
