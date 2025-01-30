@@ -55,6 +55,8 @@ runs:
           fi
 
           echo "Processing Slack notification for ENV=$ENV REGION=$REGION..."
+          echo "Listing files inside $GITHUB_ACTION_PATH:"
+          ls -R $GITHUB_ACTION_PATH
 
           # 4) Determine file path & style
           #    If we know "review" style uses "review-gitops/$ENV/$REGION/versions.yaml"
