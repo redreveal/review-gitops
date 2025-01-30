@@ -45,7 +45,7 @@ runs:
           # Only call the Python script if the environment matches the env_type
           if [[ "$ENV" == "${{ inputs.env_type }}" ]]; then
             echo "Processing env=$ENV region=$REGION"
-            python slack_notify.py "$ENV" "$REGION" "$STYLE"
+            python .github/actions/gitops_slack_notify/slack_notify.py "$ENV" "$REGION" "$STYLE"
           fi
         done
       shell: bash
