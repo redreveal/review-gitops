@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import sys
 import yaml
@@ -20,12 +18,10 @@ ARGO_URLS = {
 }
 
 def load_yaml(file_path):
-    """Load a YAML file safely."""
     with open(file_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 def post_to_slack(slack_webhook, message):
-    """Post the given message to Slack using requests."""
     if not slack_webhook:
         print("No slack_webhook provided; skipping Slack post.")
         return
@@ -40,17 +36,9 @@ def post_to_slack(slack_webhook, message):
         print(f"Failed to post message to Slack: {e}")
         # Optionally: sys.exit(1)
 
-###############################################################################
-# Summaries
-###############################################################################
 def summarize_review_versions(data, file_path):
-    """
-    Summarize a `versions.yaml` file that has 'defaults' and 'msas'.
-    We'll wrap the details in a code block for easier reading.
-    """
     lines = []
     lines.append(f":bell: *Review-GitOps Update for* `{file_path}`")
-    # Begin code block
     lines.append("```")
 
     defaults = data.get('defaults', {})
@@ -77,27 +65,19 @@ def summarize_review_versions(data, file_path):
     else:
         lines.append("\nNo MSA overrides found.")
 
-    # End code block
     lines.append("```")
 
-    # Join all lines with newlines
     return "\n".join(lines)
 
 
 def summarize_helm_values(data, file_path):
-    """
-    Summarize a Helm values YAML, scanning for {image, tag} pairs.
-    Also placed in a code block for easier reading.
-    """
     lines = []
     lines.append(f":helm: *Helm Values Update for* `{file_path}`")
-    # Begin code block
     lines.append("```")
 
     found_images = []
 
     def find_images_recursively(obj, path=""):
-        """Recursively walk the YAML dict for 'image'/'tag'."""
         if isinstance(obj, dict):
             if "image" in obj and "tag" in obj:
                 found_images.append({
@@ -123,49 +103,43 @@ def summarize_helm_values(data, file_path):
     else:
         lines.append("No `image` + `tag` references found in the Helm values.")
 
-    # End code block
     lines.append("```")
     return "\n".join(lines)
 
-###############################################################################
-# Main logic: parse arguments, pick style, generate Slack message
-###############################################################################
 def main():
     """
     Usage:
-      python unified_process_values.py <file.yaml> <env> <region> [style]
+      python slack_notify.py <file.yaml> <env> <region> [style]
 
     Examples:
-      python unified_process_values.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
-      python unified_process_values.py some/helm/values.yaml dev us-east-1 helm
-      python unified_process_values.py some/path/file.yaml dev us-east-1 auto
+      python slack_notify.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
+      python slack_notify.py revealai-gitops/helm/values.yaml dev us-east-1 helm
+      python slack_notify.py some/path/file.yaml dev us-east-1 auto
     """
     if len(sys.argv) < 4:
-        print("Usage: python unified_process_values.py <file.yaml> <env> <region> [style]")
+        print("Usage: python slack_notify.py <file.yaml> <env> <region> [style]")
         sys.exit(1)
 
     file_path = sys.argv[1]
     environment = sys.argv[2]
     region = sys.argv[3]
 
-    # If no style is provided, default to "auto"
+    """ 
+    If no style is provided, default to "auto" 
+    """
     style = sys.argv[4] if len(sys.argv) >= 5 else "auto"
 
-    # 1) Load YAML
     data = load_yaml(file_path)
     if not data:
         print(f"WARNING: YAML file {file_path} appears empty.")
         data = {}
 
-    # 2) Determine summarization approach
     if style == "auto":
-        # If "defaults" or "msas" exist, assume it's a "review" style
         if "defaults" in data or "msas" in data:
             style = "review"
         else:
             style = "helm"
 
-    # 3) Summarize
     if style == "review":
         slack_message = summarize_review_versions(data, file_path)
     elif style == "helm":
@@ -174,28 +148,17 @@ def main():
         print(f"ERROR: Unknown style '{style}'. Use 'review', 'helm', or 'auto'.")
         sys.exit(1)
 
-    # 4) Construct ArgoCD URL
     base_argocd_url = ARGO_URLS.get(environment, {}).get(region, "Unknown ArgoCD URL")
 
-    # If it's "review" style, we show a filtered link. Otherwise the base link.
     if style == "review":
-        # example search for "review-" plus the environment
-        # (Adjust your actual search param if needed)
         filtered_url = f"{base_argocd_url}/applications?search=review-&view=list&showFavorites=false&proj=&sync=&autoSync=&health=&namespace=&cluster=&labels="
         slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|ArgoCD URL for ({environment}/{region})>\n"
     else:
-        # Helm style -> just show the base link
         slack_message += f"\n\n:point_right: *ArgoCD:* <{base_argocd_url}|ArgoCD URL for {environment}/{region}>\n"
 
-    # Optionally add a separator
     slack_message += "\n---\n"
-
-    # 5) Post to Slack
     slack_webhook = os.getenv("SLACK_WEBHOOK", None)
     post_to_slack(slack_webhook, slack_message)
-
-    print("\nDone.\n")
-
 
 if __name__ == "__main__":
     main()
