@@ -1,0 +1,101 @@
+name: Revealai-GitOps Workflow
+
+on:
+  push:
+    paths:
+      - 'rai/**/'
+
+
+jobs:
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      prod_changed: ${{ steps.determine-structure.outputs.prod_changed }}
+      dev_changed: ${{ steps.determine-structure.outputs.dev_changed }}
+      uat_changed: ${{ steps.determine-structure.outputs.uat_changed }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+
+      - uses: ./.github/actions/gitops_determine_environments
+        id: determine-structure
+
+
+      - name: changes
+        run: |
+          echo "prod change ${{ steps.determine-structure.outputs.prod_changed }}"
+          echo "dev change ${{ steps.determine-structure.outputs.dev_changed }}"
+          echo "uat change ${{ steps.determine-structure.outputs.uat_changed }}"
+
+
+
+  update-reveal-ai-dev:
+    needs: determine-environment
+    if: ${{ needs.determine-environment.outputs.dev_changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: revealai-gitops
+
+      -  uses: actions/checkout@v2
+         with:
+          repository: redreveal/argocd-gitops-versions
+          token: ${{ inputs.repo_token }}
+          path: argocd-gitops
+
+      - name: Copy Files from revealai-gitops/RAI to argocd-gitops-versions
+        run: |
+          rsync -av --exclude='.git' revealai-gitops/RAI/dev/ argocd-gitops/reveal-ai/dev/
+
+      - name: Copy Files from revealai-gitops/RAI-bootstrap/RAI to argocd-gitops-versions
+        run: |
+          rsync -av --exclude='.git' revealai-gitops/RAI-bootstrap/dev/ argocd-gitops/reveal-ai-bootstrap/dev/
+
+      - name: Slack Notify Summaries
+        uses: ./.github/actions/gitops_slack_notify
+        with:
+          env_type: 'dev'
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
+
+  update-reveal-ai-uat:
+    needs: determine-environment
+    if: ${{ needs.determine-environment.outputs.uat_changed == 'true' }}
+    environment: uat
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: revealai-gitops
+
+      - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.ARGOCD_GITOPS_VERSIONS_DEPLOYMENT_KEY }}
+          repository: PureDiscovery/argocd-gitops-versions
+          path: argocd-gitops
+
+      - uses: PureDiscovery/github_actions/.github/actions/gitops_review_dependencies@master
+
+      - uses: PureDiscovery/github_actions/.github/actions/gitops_helm_image_verify/@master
+        with:
+          repo: "revealai-gitops"
+          chart: "reveal-ai"
+
+      - name: Copy Files from revealai-gitops/RAI to argocd-gitops-versions
+        run: |
+          rsync -av --exclude='.git' revealai-gitops/RAI/uat/ argocd-gitops/reveal-ai/uat/
+
+      - name: Copy Files from revealai-gitops/RAI-bootstrap/RAI to argocd-gitops-versions
+        run: |
+          rsync -av --exclude='.git' revealai-gitops/RAI-bootstrap/uat/ argocd-gitops/reveal-ai-bootstrap/uat/
+
+      - name: Commit and Push Changes
+        working-directory: argocd-gitops
+        run: |
+          git config user.email "sre-team@revealdata.com"
+          git config user.name "SRE team"
+          git add .
+          git commit -m "Update argocd-gitops-versions for RAI uat environment" || echo "No changes to commit"
+          git push origin main
