@@ -19,12 +19,10 @@ ARGO_URLS = {
     }
 }
 
-
 def load_yaml(file_path):
     """Load a YAML file safely."""
     with open(file_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
-
 
 def post_to_slack(slack_webhook, message):
     """Post the given message to Slack using requests."""
@@ -41,7 +39,6 @@ def post_to_slack(slack_webhook, message):
     except requests.exceptions.RequestException as e:
         print(f"Failed to post message to Slack: {e}")
         # Optionally: sys.exit(1)
-
 
 ###############################################################################
 # Summaries
@@ -130,22 +127,21 @@ def summarize_helm_values(data, file_path):
     lines.append("```")
     return "\n".join(lines)
 
-
 ###############################################################################
 # Main logic: parse arguments, pick style, generate Slack message
 ###############################################################################
 def main():
     """
     Usage:
-      python slack_notify.py <file.yaml> <env> <region> [style]
+      python unified_process_values.py <file.yaml> <env> <region> [style]
 
     Examples:
-      python slack_notify.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
-      python slack_notify.py revealai-gitops/helm/values.yaml dev us-east-1 helm
-      python slack_notify.py some/path/file.yaml dev us-east-1 auto
+      python unified_process_values.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
+      python unified_process_values.py some/helm/values.yaml dev us-east-1 helm
+      python unified_process_values.py some/path/file.yaml dev us-east-1 auto
     """
     if len(sys.argv) < 4:
-        print("Usage: python slack_notify.py <file.yaml> <env> <region> [style]")
+        print("Usage: python unified_process_values.py <file.yaml> <env> <region> [style]")
         sys.exit(1)
 
     file_path = sys.argv[1]
@@ -163,7 +159,7 @@ def main():
 
     # 2) Determine summarization approach
     if style == "auto":
-        # Example "auto" detection:
+        # If "defaults" or "msas" exist, assume it's a "review" style
         if "defaults" in data or "msas" in data:
             style = "review"
         else:
@@ -178,17 +174,20 @@ def main():
         print(f"ERROR: Unknown style '{style}'. Use 'review', 'helm', or 'auto'.")
         sys.exit(1)
 
-    # 4) Append a short, clickable link for ArgoCD
-    argocd_url = ARGO_URLS.get(environment, {}).get(region, "Unknown ArgoCD URL")
+    # 4) Construct ArgoCD URL
+    base_argocd_url = ARGO_URLS.get(environment, {}).get(region, "Unknown ArgoCD URL")
 
-    # If you want a filtered link for 'review' apps, you might do:
-    # filtered_url = f"{argocd_url}/applications?search=review-&view=list&showFavorites=false&proj=&sync=&autoSync=&health=&namespace=&cluster=&labels="
-    # slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|Open Filtered ArgoCD>"
+    # If it's "review" style, we show a filtered link. Otherwise the base link.
+    if style == "review":
+        # example search for "review-" plus the environment
+        # (Adjust your actual search param if needed)
+        filtered_url = f"{base_argocd_url}/applications?search=review-&view=list&showFavorites=false&proj=&sync=&autoSync=&health=&namespace=&cluster=&labels="
+        slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|ArgoCD URL for ({environment}/{region})>\n"
+    else:
+        # Helm style -> just show the base link
+        slack_message += f"\n\n:point_right: *ArgoCD:* <{base_argocd_url}|ArgoCD URL for {environment}/{region}>\n"
 
-    # Otherwise, just display the base link
-    slack_message += f"\n\n:point_right: *ArgoCD:* <{argocd_url}|ArgoCD URL for {region}>\n"
-
-    # Optionally add a separator if you are sending multiple messages
+    # Optionally add a separator
     slack_message += "\n---\n"
 
     # 5) Post to Slack
