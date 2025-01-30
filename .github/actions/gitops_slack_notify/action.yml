@@ -72,7 +72,7 @@ runs:
           fi
 
           # 5) Call the Python script for each region/file
-          python $GITHUB_ACTION_PATH/unified_process_values.py "$FILE_PATH" "$ENV" "$REGION" "$STYLE"
+          python $GITHUB_ACTION_PATH/slack_message.py "$FILE_PATH" "$ENV" "$REGION" "$STYLE"
         done
 
         echo "Done processing Slack notifications."
