@@ -1,6 +1,6 @@
 bootstrap:
   image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/reveal_ai/bootstrap"
-  tag: "Latest"
+  tag: "latest"
   env:
     - name: "s3-bucketname"
       value: "dev-us-east-1-reveal-ai"
