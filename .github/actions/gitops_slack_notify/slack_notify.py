@@ -137,15 +137,15 @@ def summarize_helm_values(data, file_path):
 def main():
     """
     Usage:
-      python unified_process_values.py <file.yaml> <env> <region> [style]
+      python slack_notify.py <file.yaml> <env> <region> [style]
 
     Examples:
-      python unified_process_values.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
-      python unified_process_values.py some/helm/values.yaml dev us-east-1 helm
-      python unified_process_values.py some/path/file.yaml dev us-east-1 auto
+      python slack_notify.py review-gitops/prod/us-east-1/versions.yaml prod us-east-1 review
+      python slack_notify.py revealai-gitops/helm/values.yaml dev us-east-1 helm
+      python slack_notify.py some/path/file.yaml dev us-east-1 auto
     """
     if len(sys.argv) < 4:
-        print("Usage: python unified_process_values.py <file.yaml> <env> <region> [style]")
+        print("Usage: python slack_notify.py <file.yaml> <env> <region> [style]")
         sys.exit(1)
 
     file_path = sys.argv[1]
