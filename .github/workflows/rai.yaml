@@ -54,7 +54,7 @@ jobs:
           rsync -av --exclude='.git' revealai-gitops/RAI-bootstrap/dev/ argocd-gitops/reveal-ai-bootstrap/dev/
 
       - name: Slack Notify Summaries
-        uses: ./.github/actions/gitops_slack_notify
+        uses: ./revealai-gitops/.github/actions/gitops_slack_notify
         with:
           env_type: 'dev'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
