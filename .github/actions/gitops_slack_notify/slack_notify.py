@@ -19,10 +19,12 @@ ARGO_URLS = {
     }
 }
 
+
 def load_yaml(file_path):
     """Load a YAML file safely."""
     with open(file_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
 
 def post_to_slack(slack_webhook, message):
     """Post the given message to Slack using requests."""
@@ -40,49 +42,60 @@ def post_to_slack(slack_webhook, message):
         print(f"Failed to post message to Slack: {e}")
         # Optionally: sys.exit(1)
 
+
 ###############################################################################
 # Summaries
 ###############################################################################
 def summarize_review_versions(data, file_path):
     """
     Summarize a `versions.yaml` file that has 'defaults' and 'msas'.
+    We'll wrap the details in a code block for easier reading.
     """
     lines = []
     lines.append(f":bell: *Review-GitOps Update for* `{file_path}`")
+    # Begin code block
+    lines.append("```")
 
     defaults = data.get('defaults', {})
     msas = data.get('msas', {})
 
-    lines.append("\n*Defaults:*")
+    lines.append("Defaults:")
     for component, comp_data in defaults.items():
         default_ver = comp_data.get('default', 'N/A')
-        lines.append(f" - *{component}* default = `{default_ver}`")
+        lines.append(f" - {component} default = {default_ver}")
 
         for svc, svc_ver in comp_data.get('services', {}).items():
-            lines.append(f"   - service `{svc}` = `{svc_ver}`")
+            lines.append(f"   - service {svc} = {svc_ver}")
 
     if msas:
-        lines.append("\n*MSA Overrides:*")
+        lines.append("\nMSA Overrides:")
         for msa, override_data in msas.items():
-            lines.append(f" - MSA `{msa}`:")
+            lines.append(f" - MSA {msa}:")
             for comp_name, comp_values in override_data.items():
-                lines.append(f"   - Component: `{comp_name}`")
+                lines.append(f"   - Component: {comp_name}")
                 if 'default' in comp_values:
-                    lines.append(f"     - default override = `{comp_values['default']}`")
+                    lines.append(f"     - default override = {comp_values['default']}")
                 for svc, svc_ver in comp_values.get('services', {}).items():
-                    lines.append(f"     - service `{svc}` = `{svc_ver}`")
+                    lines.append(f"     - service {svc} = {svc_ver}")
     else:
         lines.append("\nNo MSA overrides found.")
 
+    # End code block
+    lines.append("```")
+
+    # Join all lines with newlines
     return "\n".join(lines)
 
 
 def summarize_helm_values(data, file_path):
     """
     Summarize a Helm values YAML, scanning for {image, tag} pairs.
+    Also placed in a code block for easier reading.
     """
     lines = []
     lines.append(f":helm: *Helm Values Update for* `{file_path}`")
+    # Begin code block
+    lines.append("```")
 
     found_images = []
 
@@ -106,14 +119,17 @@ def summarize_helm_values(data, file_path):
     find_images_recursively(data)
 
     if found_images:
-        lines.append("\n*Found these image:tag references:*")
+        lines.append("Found these image:tag references:")
         for item in found_images:
             p = item['path'] or 'root'
-            lines.append(f" - Path: `{p}`, image: `{item['image']}`, tag: `{item['tag']}`")
+            lines.append(f" - Path: {p}, image: {item['image']}, tag: {item['tag']}")
     else:
-        lines.append("\nNo `image` + `tag` references found in the Helm values.")
+        lines.append("No `image` + `tag` references found in the Helm values.")
 
+    # End code block
+    lines.append("```")
     return "\n".join(lines)
+
 
 ###############################################################################
 # Main logic: parse arguments, pick style, generate Slack message
@@ -145,7 +161,7 @@ def main():
         print(f"WARNING: YAML file {file_path} appears empty.")
         data = {}
 
-    # 2) Determine summarization approach:
+    # 2) Determine summarization approach
     if style == "auto":
         # Example "auto" detection:
         if "defaults" in data or "msas" in data:
@@ -162,15 +178,25 @@ def main():
         print(f"ERROR: Unknown style '{style}'. Use 'review', 'helm', or 'auto'.")
         sys.exit(1)
 
-    # 4) Append ArgoCD URL
+    # 4) Append a short, clickable link for ArgoCD
     argocd_url = ARGO_URLS.get(environment, {}).get(region, "Unknown ArgoCD URL")
-    slack_message += f"\n\n:point_right: *ArgoCD URL:* <{argocd_url}>"
 
-    # 5) (Optional) Post to Slack
+    # If you want a filtered link for 'review' apps, you might do:
+    # filtered_url = f"{argocd_url}/applications?search=review-&view=list&showFavorites=false&proj=&sync=&autoSync=&health=&namespace=&cluster=&labels="
+    # slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|Open Filtered ArgoCD>"
+
+    # Otherwise, just display the base link
+    slack_message += f"\n\n:point_right: *ArgoCD:* <{argocd_url}|Open ArgoCD for {region}>\n"
+
+    # Optionally add a separator if you are sending multiple messages
+    slack_message += "\n---\n"
+
+    # 5) Post to Slack
     slack_webhook = os.getenv("SLACK_WEBHOOK", None)
     post_to_slack(slack_webhook, slack_message)
 
     print("\nDone.\n")
+
 
 if __name__ == "__main__":
     main()
