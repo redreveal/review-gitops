@@ -32,7 +32,7 @@ runs:
         ls -ltr
         ls -ltr ..
         ls -ltr ../..
-        regions_envs=$(cat ../review-gitops/regions_envs.json | jq -r '.[] | @base64')
+        regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
         for region_env in $regions_envs; do
           _jq() {
             echo ${region_env} | base64 --decode | jq -r ${1}
