@@ -1,80 +1,104 @@
 name: "GitOps Slack Notify"
-description: "Automatically detect changed regions from region_envs.json, summarize changes, and post to Slack."
+description: "Handle Slack notifications for both review-gitops (region_envs.json) and reveal-ai (helm)."
 
 inputs:
-  # If you still want to pass an env_type (prod/dev/uat) from the calling workflow, you can.
-  env_type:
-    description: "Environment type (prod, dev, uat)"
-    required: false
-    default: ""
-  # This Slack webhook is optional—if not present, we skip.
   slack_webhook:
-    description: "Slack Webhook for notifications"
-    required: false
+    description: "Slack Webhook URL"
+    required: false  # can be optional if you want to skip Slack sometimes
 
 runs:
   using: "composite"
   steps:
-    - name: Install Python Dependencies
+    - name: Install Dependencies
       shell: bash
       run: |
         pip install requests pyyaml
 
-    - name: Slack Notify for Each Region
+    - name: Slack Notify for Both Review & Reveal
       shell: bash
       env:
         SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
       run: |
         set -e
 
-        # 1) Check if region_envs.json exists. If missing, skip or exit gracefully.
-        if [ ! -f "review-gitops/regions_envs.json" ]; then
-          echo "No 'review-gitops/regions_envs.json' found. Skipping Slack notify."
+        # If no Slack webhook is provided, skip
+        if [ -z "$SLACK_WEBHOOK" ]; then
+          echo "No slack_webhook provided. Skipping Slack notifications."
           exit 0
         fi
 
-        # 2) Read the array from region_envs.json
-        regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
-        if [ -z "$regions_envs" ]; then
-          echo "No changed regions found in region_envs.json. Skipping Slack notify."
-          exit 0
+        # 1) If region_envs.json exists, do the Review loop
+        if [ -f "review-gitops/regions_envs.json" ]; then
+          echo "Detected region_envs.json => We'll do the 'review' approach."
+
+          regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
+          if [ -z "$regions_envs" ]; then
+            echo "No changed regions in region_envs.json. Skipping Slack notify."
+            exit 0
+          fi
+
+          for region_env in $regions_envs; do
+            _jq() {
+              echo "$region_env" | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            
+            echo "Posting Slack for $ENV/$REGION..."
+            # We assume "versions.yaml" in "review-gitops/$ENV/$REGION/"
+            FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
+
+            if [ -f "$FILE" ]; then
+              python $GITHUB_ACTION_PATH/unified_process_values.py "$FILE" "$ENV" "$REGION" "auto"
+            else
+              echo "File $FILE not found, skipping $ENV/$REGION"
+            fi
+          done
+
+        else
+          # 2) region_envs.json does NOT exist => reveal-ai scenario (helm).
+          echo "No region_envs.json => Possibly reveal-ai or other helm approach."
+
+          # Simple approach: Check if there's a changed `values.yaml` in the repo
+          # That we want to post Slack for. We'll do a quick git diff or something
+          # to find them. Adjust to your actual reveal-ai folder structure.
+          echo "Scanning changed files for *values.yaml..."
+          # If you're in the same job that has a prior checkout, you can do:
+          changed_files=$(git diff --name-only HEAD~1 HEAD || true)  # last commit
+          
+          # Or if you want the entire push range, adjust accordingly.
+          # This is just an example! You might have your own logic for reveal-ai changes.
+
+          found_helm=false
+          for f in $changed_files; do
+            # e.g. if your reveal-ai path is "revealai-gitops/RAI/dev/values.yaml"
+            # or "argocd-gitops/reveal-ai/dev/values.yaml"
+            # Adjust the pattern as you prefer
+            if [[ "$f" == *"values.yaml" ]]; then
+              found_helm=true
+              # Attempt to parse environment from path, e.g. "dev" or "prod"
+              # This is just a naive example:
+              if echo "$f" | grep -q "/dev/"; then
+                ENV="dev"
+              elif echo "$f" | grep -q "/prod/"; then
+                ENV="prod"
+              elif echo "$f" | grep -q "/uat/"; then
+                ENV="uat"
+              else
+                ENV="dev"  # fallback or skip
+              fi
+
+              # You might parse region, but if reveal-ai only has 1 region, or doesn't use region, set a default
+              REGION="us-east-1"
+
+              echo "Posting Slack for HELM file $f => ENV=$ENV region=$REGION"
+              python $GITHUB_ACTION_PATH/unified_process_values.py "$f" "$ENV" "$REGION" "helm"
+            fi
+          done
+
+          if [ "$found_helm" = false ]; then
+            echo "No changed helm files found. Skipping Slack."
+          fi
         fi
 
-        # 3) Loop over each (env, region)
-        for region_env in $regions_envs; do
-          _jq() {
-            echo "${region_env}" | base64 --decode | jq -r ${1}
-          }
-          REGION=$(_jq '.region')
-          ENV=$(_jq '.env')
-
-          # If you want to skip different ENV from inputs.env_type, do:
-          if [ -n "${{ inputs.env_type }}" ] && [ "$ENV" != "${{ inputs.env_type }}" ]; then
-            echo "Skipping $ENV/$REGION because it doesn't match inputs.env_type..."
-            continue
-          fi
-
-          echo "Processing Slack notification for ENV=$ENV REGION=$REGION..."
-          echo "Listing files inside $GITHUB_ACTION_PATH:"
-          ls -R $GITHUB_ACTION_PATH
-
-          # 4) Determine file path & style
-          #    If we know "review" style uses "review-gitops/$ENV/$REGION/versions.yaml"
-          #    If we know "helm" style uses "argocd-gitops/reveal-ai/$ENV/values.yaml"
-          #    This can be done via some condition or naming. Example:
-          if [ -f "review-gitops/${ENV}/${REGION}/versions.yaml" ]; then
-            FILE_PATH="review-gitops/${ENV}/${REGION}/versions.yaml"
-            STYLE="review"
-          elif [ -f "argocd-gitops/reveal-ai/${ENV}/values.yaml" ]; then
-            FILE_PATH="argocd-gitops/reveal-ai/${ENV}/values.yaml"
-            STYLE="helm"
-          else
-            echo "Could not find a recognized file for $ENV/$REGION. Skipping."
-            continue
-          fi
-
-          # 5) Call the Python script for each region/file
-          python $GITHUB_ACTION_PATH/slack_notify.py "$FILE_PATH" "$ENV" "$REGION" "$STYLE"
-        done
-
-        echo "Done processing Slack notifications."
+        echo "Done Slack notifications."
