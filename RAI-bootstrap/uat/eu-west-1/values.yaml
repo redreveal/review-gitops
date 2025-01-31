@@ -1,0 +1,42 @@
+bootstrap:
+  image: "053522176595.dkr.ecr.eu-west-1.amazonaws.com/prod/reveal_ai/bootstrap"
+  tag: "2024.12.1"
+  env:
+    - name: "s3-bucketname"
+      value: "dev-eu-west-1-reveal-ai"
+    - name: "sql-hostname"
+      valueFrom:
+        secretKeyRef:
+          name: bootstrap-sql-credentials
+          key: sql-hostname
+    - name: "sql-username"
+      valueFrom:
+        secretKeyRef:
+          name: bootstrap-sql-credentials
+          key: sql-username
+    - name: "sql-password"
+      valueFrom:
+        secretKeyRef:
+          name: bootstrap-sql-credentials
+          key: sql-password
+    - name: "encryptionKey"
+      valueFrom:
+        secretKeyRef:
+          name: bootstrap-sql-credentials
+          key: rai-encryption-key
+    - name: "BRAINSPACE_URL"
+      valueFrom:
+        secretKeyRef:
+          name: bootstrap-sql-credentials
+          key: brainspace-url
+    - name: "DBN"
+      value: "NexLPAdmin"
+    - name: "AWSRegion"
+      value: "eu-west-1"
+  nodeSelector:
+    kubernetes.io/os: windows
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: windows_reveal_ai
+      value: execution
+      effect: NoSchedule
