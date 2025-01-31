@@ -28,8 +28,31 @@ runs:
 
         # If region_envs.json => do review approach
         if [ -f "review-gitops/regions_envs.json" ]; then
-          echo "Doing review approach..."
-          # ... same code as before ...
+          echo "Detected region_envs.json => We'll do the 'review' approach."
+
+          regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
+          if [ -z "$regions_envs" ]; then
+            echo "No changed regions in region_envs.json. Skipping Slack notify."
+            exit 0
+          fi
+
+          for region_env in $regions_envs; do
+            _jq() {
+              echo "$region_env" | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            
+            echo "Posting Slack for $ENV/$REGION..."
+            # We assume "versions.yaml" in "review-gitops/$ENV/$REGION/"
+            FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
+
+            if [ -f "$FILE" ]; then
+              python $GITHUB_ACTION_PATH/unified_process_values.py "$FILE" "$ENV" "$REGION" "auto"
+            else
+              echo "File $FILE not found, skipping $ENV/$REGION"
+            fi
+          done
         else
           # Fallback => reveal-ai approach
           if [ ! -f "helm_changed_files.json" ]; then
