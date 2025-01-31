@@ -81,8 +81,8 @@ def summarize_helm_values(data, file_path):
         if isinstance(obj, dict):
             if "image" in obj and "tag" in obj:
                 found_images.append({
-                    "path": path.strip("/"),
-                    "image": obj["image"],
+                    "path": path.strip("/") or "root",
+                    "full_image": obj["image"],
                     "tag": obj["tag"]
                 })
             for k, v in obj.items():
@@ -95,16 +95,25 @@ def summarize_helm_values(data, file_path):
 
     find_images_recursively(data)
 
+    def short_image_name(full_image):
+        # keep everything after the FIRST slash
+        splitted = full_image.split('/', 1)
+        if len(splitted) == 2:
+            return splitted[1]  # e.g. "dev/automation/reveal-ai-automation"
+        return full_image
+
     if found_images:
         lines.append("Found these image:tag references:")
         for item in found_images:
-            p = item['path'] or 'root'
-            lines.append(f" - Path: {p}, image: {item['image']}, tag: {item['tag']}")
+            short_name = short_image_name(item["full_image"])
+            lines.append(f" - {short_name}: {item['tag']}")
     else:
         lines.append("No `image` + `tag` references found in the Helm values.")
 
     lines.append("```")
     return "\n".join(lines)
+
+
 
 def main():
     """
