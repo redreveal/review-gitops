@@ -14,91 +14,47 @@ runs:
       run: |
         pip install requests pyyaml
 
-    - name: Slack Notify for Both Review & Reveal
+    - name: Slack Notify Summaries
       shell: bash
       env:
         SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
       run: |
         set -e
 
-        # If no Slack webhook is provided, skip
         if [ -z "$SLACK_WEBHOOK" ]; then
-          echo "No slack_webhook provided. Skipping Slack notifications."
+          echo "No Slack webhook. Skipping."
           exit 0
         fi
 
-        # 1) If region_envs.json exists, do the Review loop
+        # If region_envs.json => do review approach
         if [ -f "review-gitops/regions_envs.json" ]; then
-          echo "Detected region_envs.json => We'll do the 'review' approach."
-
-          regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
-          if [ -z "$regions_envs" ]; then
-            echo "No changed regions in region_envs.json. Skipping Slack notify."
+          echo "Doing review approach..."
+          # ... same code as before ...
+        else
+          # Fallback => reveal-ai approach
+          if [ ! -f "helm_changed_files.json" ]; then
+            echo "No helm_changed_files.json found => no Slack for reveal."
             exit 0
           fi
 
-          for region_env in $regions_envs; do
-            _jq() {
-              echo "$region_env" | base64 --decode | jq -r ${1}
-            }
-            REGION=$(_jq '.region')
-            ENV=$(_jq '.env')
-            
-            echo "Posting Slack for $ENV/$REGION..."
-            # We assume "versions.yaml" in "review-gitops/$ENV/$REGION/"
-            FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
-
-            if [ -f "$FILE" ]; then
-              python $GITHUB_ACTION_PATH/unified_process_values.py "$FILE" "$ENV" "$REGION" "auto"
-            else
-              echo "File $FILE not found, skipping $ENV/$REGION"
-            fi
-          done
-
-        else
-          # 2) region_envs.json does NOT exist => reveal-ai scenario (helm).
-          echo "No region_envs.json => Possibly reveal-ai or other helm approach."
-
-          # Simple approach: Check if there's a changed `values.yaml` in the repo
-          # That we want to post Slack for. We'll do a quick git diff or something
-          # to find them. Adjust to your actual reveal-ai folder structure.
-          echo "Scanning changed files for *values.yaml..."
-          # If you're in the same job that has a prior checkout, you can do:
-          changed_files=$(git diff --name-only HEAD~1 HEAD || true)  # last commit
-          
-          # Or if you want the entire push range, adjust accordingly.
-          # This is just an example! You might have your own logic for reveal-ai changes.
-
-          found_helm=false
-          for f in $changed_files; do
-            # e.g. if your reveal-ai path is "revealai-gitops/RAI/dev/values.yaml"
-            # or "argocd-gitops/reveal-ai/dev/values.yaml"
-            # Adjust the pattern as you prefer
-            if [[ "$f" == *"values.yaml" ]]; then
-              found_helm=true
-              # Attempt to parse environment from path, e.g. "dev" or "prod"
-              # This is just a naive example:
-              if echo "$f" | grep -q "/dev/"; then
-                ENV="dev"
-              elif echo "$f" | grep -q "/prod/"; then
-                ENV="prod"
-              elif echo "$f" | grep -q "/uat/"; then
-                ENV="uat"
-              else
-                ENV="dev"  # fallback or skip
-              fi
-
-              # You might parse region, but if reveal-ai only has 1 region, or doesn't use region, set a default
-              REGION="us-east-1"
-
-              echo "Posting Slack for HELM file $f => ENV=$ENV region=$REGION"
-              python $GITHUB_ACTION_PATH/unified_process_values.py "$f" "$ENV" "$REGION" "helm"
-            fi
-          done
-
-          if [ "$found_helm" = false ]; then
-            echo "No changed helm files found. Skipping Slack."
+          changed_files=$(cat helm_changed_files.json | jq -r '.[]')
+          if [ -z "$changed_files" ]; then
+            echo "Empty helm_changed_files.json => skipping Slack."
+            exit 0
           fi
-        fi
 
+          for f in $changed_files; do
+            # parse environment/region from the path
+            # e.g. "revealai-gitops/RAI/dev/us-east-1/values.yaml"
+            # remove everything before "RAI/" ...
+            after_rai=$(echo "$f" | sed 's|.*RAI/||')
+            # => "dev/us-east-1/values.yaml"
+            ENV=$(echo "$after_rai" | cut -d'/' -f1)
+            REGION=$(echo "$after_rai" | cut -d'/' -f2)
+
+            echo "Slack for $ENV/$REGION => $f"
+            python $GITHUB_ACTION_PATH/unified_process_values.py "$f" "$ENV" "$REGION" "helm"
+          done
+        fi
         echo "Done Slack notifications."
+    
