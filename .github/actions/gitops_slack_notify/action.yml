@@ -42,7 +42,10 @@ runs:
             echo "Empty helm_changed_files.json => skipping Slack."
             exit 0
           fi
-
+          
+          
+          #DONT FORGET TO REMOVE
+          cd revealai-gitops
           for f in $changed_files; do
             # parse environment/region from the path
             # e.g. "revealai-gitops/RAI/dev/us-east-1/values.yaml"
