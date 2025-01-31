@@ -54,33 +54,45 @@ runs:
             fi
           done
         else
-          # Fallback => reveal-ai approach
+          # 3. Handle RevealAI-GitOps (<env>/) approach
+          echo "No review-gitops/regions_envs.json found => Proceeding with RevealAI-GitOps Helm Slack notifications."
+
+          # Check for helm_changed_files.json
           if [ ! -f "helm_changed_files.json" ]; then
-            echo "No helm_changed_files.json found => no Slack for reveal."
+            echo "No helm_changed_files.json found. Skipping Slack notifications for Helm."
             exit 0
           fi
 
-          changed_files=$(cat helm_changed_files.json | jq -r '.[]')
+          changed_files=$(jq -r '.[]' helm_changed_files.json)
           if [ -z "$changed_files" ]; then
-            echo "Empty helm_changed_files.json => skipping Slack."
+            echo "Empty helm_changed_files.json. Skipping Slack notifications for Helm."
             exit 0
           fi
-          
-          
-          #DONT FORGET TO REMOVE
-          cd revealai-gitops
-          for f in $changed_files; do
-            # parse environment/region from the path
-            # e.g. "revealai-gitops/RAI/dev/us-east-1/values.yaml"
-            # remove everything before "RAI/" ...
-            after_rai=$(echo "$f" | sed 's|.*RAI/||')
-            # => "dev/us-east-1/values.yaml"
-            ENV=$(echo "$after_rai" | cut -d'/' -f1)
-            REGION=$(echo "$after_rai" | cut -d'/' -f2)
 
-            echo "Slack for $ENV/$REGION => $f"
-            python $GITHUB_ACTION_PATH/slack_notify.py "$f" "$ENV" "$REGION" "helm"
+          for f in $changed_files; do
+            # Determine repository type based on path
+            if echo "$f" | grep -q "^RAI/"; then
+              # For Review-GitOps: RAI/<env>/<region>/values.yaml
+              after_subfolder=$(echo "$f" | sed 's|^RAI/||')
+            else
+              # For RevealAI-GitOps: <env>/<region>/values.yaml
+              after_subfolder="$f"
+            fi
+
+            # Extract environment and region
+            ENV=$(echo "$after_subfolder" | cut -d'/' -f1)
+            REGION=$(echo "$after_subfolder" | cut -d'/' -f2)
+
+            # Validate ENV and REGION
+            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
+              echo "Could not parse ENV or REGION from path: $f. Skipping."
+              continue
+            fi
+
+            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${f}"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$f" "$ENV" "$REGION" "helm"
           done
         fi
-        echo "Done Slack notifications."
+
+        echo "Completed Slack notifications."
     
