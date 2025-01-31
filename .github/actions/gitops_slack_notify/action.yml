@@ -48,7 +48,7 @@ runs:
             FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
 
             if [ -f "$FILE" ]; then
-              python $GITHUB_ACTION_PATH/unified_process_values.py "$FILE" "$ENV" "$REGION" "auto"
+              python $GITHUB_ACTION_PATH/slack_notify.py "$FILE" "$ENV" "$REGION" "auto"
             else
               echo "File $FILE not found, skipping $ENV/$REGION"
             fi
