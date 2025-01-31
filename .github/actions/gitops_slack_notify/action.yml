@@ -53,7 +53,7 @@ runs:
             REGION=$(echo "$after_rai" | cut -d'/' -f2)
 
             echo "Slack for $ENV/$REGION => $f"
-            python $GITHUB_ACTION_PATH/unified_process_values.py "$f" "$ENV" "$REGION" "helm"
+            python $GITHUB_ACTION_PATH/slack_notify.py "$f" "$ENV" "$REGION" "helm"
           done
         fi
         echo "Done Slack notifications."
