@@ -696,7 +696,7 @@ reranker:
 datascience:
   enabled: true
   image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/datascience-tools"
-  tag: "latest"
+  tag: "Latest"
   env:
     - name: "sqlpass"
       valueFrom:
