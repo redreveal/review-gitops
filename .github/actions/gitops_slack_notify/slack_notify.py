@@ -72,7 +72,7 @@ def summarize_review_versions(data, file_path):
 
 def summarize_helm_values(data, file_path):
     lines = []
-    lines.append(f":helm: *Helm Values Update for* `{file_path}`")
+    lines.append(f":bell: *Helm Values Update for* `{file_path}`")
     lines.append("```")
 
     found_images = []
