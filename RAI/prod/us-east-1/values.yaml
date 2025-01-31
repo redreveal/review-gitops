@@ -1,0 +1,642 @@
+---
+global:
+  # K8s namespace. The name of the deployment.
+  namespace: "reveal-ai"
+  # Will the site be public?
+  public: false
+  reloadOnUpgrade: false
+  # -- Image pull secrets to pass to the deployment
+  imagePullSecrets:
+    - name: "test"
+  ecr:
+    enabled: false
+    secret: "reveal-ecr"
+    # -- AWS Account ID (default "475250404638")
+    account: ""
+    # -- ECR AWS Region (default "us-east-1")
+    region: ""
+    # -- Set the full hostname/url for the secret rather than building it with account and region
+    host: ""
+    # -- Docker ECR Password (required)
+    # -- Command: aws ecr get-login-password
+    password: ""
+    # -- Should we run a post install/pre upgrade job to associate the ECR secret with the service account?
+    patchDefaultServiceAccount: true
+
+
+
+# -- Configmap values for RevealAI
+configmap:
+  # -- json for setting the size and cpu of pods
+  json:
+    resources:
+      lowresource:
+        min_tag_doc_count: 0
+        max_tag_doc_count: 99999
+        requests:
+          memory: "250Gi"
+          cpu: "8000m"
+        limits:
+          memory: "250Gi"
+          cpu: "8000m"
+        java_max_heap_size: "240"
+      medresource:
+        min_tag_doc_count: 100000
+        max_tag_doc_count: 499999
+        requests:
+          memory: "250Gi"
+          cpu: "8000m"
+        limits:
+          memory: "250Gi"
+          cpu: "8000m"
+        java_max_heap_size: "240"
+      highresource:
+        min_tag_doc_count: 500000
+        max_tag_doc_count: "inf"
+        requests:
+          memory: "250Gi"
+          cpu: "8000m"
+        limits:
+          memory: "250Gi"
+          cpu: "8000m"
+        java_max_heap_size: "240"
+
+# -- ServiceWatcher service checks mssql for dead services and removes them
+serviceWatcher:
+  enabled: true
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/servicewatcher"
+  tag: "2024.11.1"
+  replicaCount: 1
+  name: "Reveal-AI"
+  env:
+    - name: "sqlpass"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+    - name: "servername"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    - name: "username"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    - name: "PortNumber"
+      value: "1433"
+    - name: "password"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials-encrypted
+          key: sql-password-encrypted
+    - name: "DBN"
+      value: "NexLPAdmin"
+  PodDisruptionBudget:
+    name: PDWatcher
+    enabled: true
+    minAvailable: 1
+    maxUnavailable:
+  nodeSelector:
+    kubernetes.io/os: windows
+    kubernetes.io/arch: amd64
+    "RevealNodeType": "windows_r_class_x"
+  tolerations:
+    - key: windows
+      value: execution
+      effect: NoSchedule
+    - key: ratio_balanced
+      value: execution
+      effect: NoSchedule
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "333m"
+    limits:
+      memory: "2Gi"
+      cpu: "333m"
+
+# -- Automation container for RevealAI Processing. Normally disabled unless desired.
+automation:
+  enabled: true
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/automation/reveal-ai-automation"
+  tag: "2024.11.1"
+  nodeSelector:
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+  tolerations: []
+  env:
+    - name: "rai_sql_port"
+      value: "1433"
+    # -- Should be an unencrypted SQL hostname. Can be of the form `hostname,port` or `hostname\instance`
+    #    for injection into the connection string
+    - name: "rai_sql_host"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    # -- Should be an unencrypted SQL username
+    - name: "rai_sql_user"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    # -- Should be an unencrypted SQL password
+    - name: "rai_sql_password"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+  resources:
+    requests:
+      memory: "250Mi"
+      cpu: "100m"
+    limits:
+      memory: "250Mi"
+      cpu: "100m"
+
+  # -- Automation container for RevealAI Cosmic processing. Normally disabled unless desired.
+  cosmicAutomation:
+    enabled: true
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/automation/reveal_ai_cosmic_automation"
+    tag: "2024.11.1"
+    nodeSelector:
+      kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+    tolerations: []
+    resources:
+      requests:
+        memory: "250Mi"
+        cpu: "100m"
+      limits:
+        memory: "250Mi"
+        cpu: "100m"
+  # -- Automation container for RevealAI Vectors processing. Normally disabled unless desired.
+  vectorsAutomation:
+    enabled: true
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/automation/reveal_ai_vectors_automation"
+    tag: "2024.11.1"
+    nodeSelector:
+      kubernetes.io/os: linux
+      kubernetes.io/arch: amd64
+    tolerations: []
+    resources:
+      requests:
+        memory: "250Mi"
+        cpu: "100m"
+      limits:
+        memory: "250Mi"
+        cpu: "100m"
+
+
+ai:
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/ai_service"
+  tag: "2024.12.1"
+  iamRole: ""
+  serviceAccountName: "reveal-ai-s3"
+  name: "Reveal-AI"
+  replicaCount: "1"
+  env:
+    - name: "splitIoApiKey"
+      valueFrom:
+        secretKeyRef:
+          name: split-access-key
+          key: apiKey
+    - name: "sqlpass"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+    - name: "servername"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    - name: "PortNumber"
+      value: "1433"
+    - name: "username"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    - name: "password"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials-encrypted
+          key: sql-password-encrypted
+    - name: "DBN"
+      value: "NexLPAdmin"
+    - name: "JAVA_MEMORY_LIMIT"
+      value: "240"
+    - name: "DNSUpdate"
+      value: "true"
+  PodDisruptionBudget:
+    name: PDBservices
+    enabled: true
+    minAvailable: 1
+    maxUnavailable:
+  nodeSelector:
+    kubernetes.io/os: windows
+    kubernetes.io/arch: amd64
+    Usage: "windows_reveal_ai"
+  tolerations:
+    - key: windows_reveal_ai
+      value: execution
+      effect: NoSchedule
+  volumeMounts:
+     - mountPath: C:\\Nexlp\\NexLP_WorkingStorage
+       name: ephemeral
+  volumes:
+     - name: ephemeral
+       emptyDir:
+         sizeLimit: 300Gi
+  resources:
+    requests:
+      memory: "32Gi"
+      cpu: "8000m"
+    limits:
+      memory: "32Gi"
+      cpu: "8000m"
+  aiCosmic:
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/ai_cosmic_service"
+    tag: "2024.12.1"
+    name: "Reveal-AI-Cosmic"
+    replicaCount: 0
+    resources:
+      requests:
+        memory: "64Gi"
+        cpu: "8000m"
+      limits:
+        memory: "64Gi"
+        cpu: "8000m"
+    nodeSelector:
+      kubernetes.io/os: windows
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: windows_reveal_ai
+        value: execution
+        effect: NoSchedule
+    volumeMounts:
+      - mountPath: C:\\Nexlp\\NexLP_WorkingStorage
+        name: ephemeral
+    volumes:
+      - name: ephemeral
+        emptyDir:
+          sizeLimit: 50Gi
+  aiVectors:
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/ai_vectors_service"
+    tag: "2024.12.1"
+    name: "Reveal-AI-Vectors"
+    replicaCount: 0
+    resources:
+      requests:
+        memory: "250Gi"
+        cpu: "8000m"
+      limits:
+        memory: "250Gi"
+        cpu: "8000m"
+    nodeSelector:
+      kubernetes.io/os: windows
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: windows_reveal_ai
+        value: execution
+        effect: NoSchedule
+    volumeMounts:
+      - mountPath: C:\\Nexlp\\NexLP_WorkingStorage
+        name: ephemeral
+    volumes:
+      - name: ephemeral
+        emptyDir:
+          sizeLimit: 1000Gi
+
+
+processing:
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/processing_service"
+  tag: "2024.12.1"
+  replicaCount: "0"
+  name: "Reveal-AI"
+  env:
+    - name: "splitIoApiKey"
+      valueFrom:
+        secretKeyRef:
+          name: split-access-key
+          key: apiKey
+    - name: "sqlpass"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+    - name: "servername"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    - name: "username"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    - name: "PortNumber"
+      value: "1433"
+    - name: "password"             # Expect that this gets set by bootstrapping.
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials-encrypted
+          key: sql-password-encrypted
+    - name: "DBN"
+      value: "NexLPAdmin"
+    - name: "brainspaceApiUrl"     # Expect that this gets set by bootstrapping.
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials-encrypted
+          key: brainspace-api-url
+    - name: "brainspaceApiKey"     # Expect that this gets set by bootstrapping.
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials-encrypted
+          key: brainspace-api-key
+    - name: "JAVA_MEMORY_LIMIT"
+      value: "90"
+  resources:
+    requests:
+      memory: "110Gi"
+      cpu: "15000m"
+    limits:
+      memory: "110Gi"
+      cpu: "16000m"
+  PodDisruptionBudget:
+    name: PDBprocessing
+    enabled: true
+    minAvailable: 2
+    maxUnavailable:
+  nodeSelector:
+    kubernetes.io/os: windows
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: windows_reveal_ai
+      value: execution
+      effect: NoSchedule
+  volumeMounts:
+     - mountPath: C:\\Nexlp\\NexLP_WorkingStorage
+       name: ephemeral
+  volumes:
+     - name: ephemeral
+       emptyDir:
+         sizeLimit: 1000Gi
+
+ingress:
+  # -- The ingress class (set per ingress)
+  # -- Options:
+  # -- alb: (AWS Application Load balancer - https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.1/)
+  # -- nginx: Nginx Ingress (https://kubernetes.github.io/ingress-nginx/)
+  enabled: true
+  # -- Multiple hostnames can be provided if using external DNS, however this may not work for ingress-nginx
+  hostname: "reveal-ai.us-east-1.revealglobal.cloud"
+
+
+nia:
+  reloadOnUpgrade: false
+  env:
+    - name: MSSQL_SERVER
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    - name: MSSQL_USER
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    - name: MSSQL_PORT
+      value: "1433"
+    - name: MSSQL_PASS
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+    - name: NEXLP_USER    # Expect that this gets set by bootstrapping.
+      valueFrom:
+        secretKeyRef:
+          name: "rai-admin"
+          key: RAI_USERNAME
+    - name: NEXLP_PASS    # Expect that this gets set by bootstrapping.
+      valueFrom:
+        secretKeyRef:
+          name: "rai-admin"
+          key: RAI_PASSWORD
+    - name: NEXLP_URL
+      value: "http://service-reveal-ai-api.reveal-ai.svc.cluster.local"
+
+  nia_api:
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai_integration/reveal_ai_integration"
+    tag: "2024.8.0"
+    env:
+    - name: "TARGET_SERVICE"
+      value: "NIA_API"
+    storage:
+      class: gp2
+      size: "50Gi"
+    resources:
+      requests:
+        memory: "8000Mi"
+      limits:
+        memory: "8000Mi"
+    PodDisruptionBudget:
+      name: PDBNiaAPI
+      enabled: true
+      minAvailable: 1
+      maxUnavailable:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+      kubernetes.io/os: linux
+    tolerations:
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 300
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 300
+    dev_service:
+      enabled: true
+      class: nlb
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: external
+        external-dns.alpha.kubernetes.io/hostname: nia.us-east-1.revealglobal.cloud
+        kubernetes.io/ingress.class: nlb
+        service.beta.kubernetes.io/aws-load-balancer-backend-protocol: tcp
+        service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: 'true'
+        service.beta.kubernetes.io/aws-load-balancer-internal: 'true'
+        service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+        service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+        service.beta.kubernetes.io/load-balancer-source-ranges: 10.0.0.0/8
+
+  nia_worker:
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai_integration/reveal_ai_integration"
+    tag: "2024.8.0"
+    env:
+      - name: "TARGET_SERVICE"
+        value: "NIA_WORKER"
+    PodDisruptionBudget:
+      name: PDBNiaWorker
+      enabled: true
+      minAvailable: 1
+      maxUnavailable:
+    nodeSelector:
+      kubernetes.io/arch: amd64
+      kubernetes.io/os: linux
+    tolerations:
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 300
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 300
+
+frontend:
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/api"
+  tag: "2024.12.1"
+  name: "Reveal-AI"
+  env:
+    - name: "servername"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-hostname
+    - name: "username"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-username
+    - name: "password"
+      valueFrom:
+        secretKeyRef:
+          name: sql-credentials
+          key: sql-password
+    - name: "DBN"
+      value: "NexLPAdmin"
+    - name: "AWSRegion"
+      value: "us-east-1"
+  PodDisruptionBudget:
+    name: PDBfrontend
+    enabled: true
+    minAvailable: 1
+    maxUnavailable:
+  nodeSelector:
+    kubernetes.io/os: windows
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: windows_reveal_ai
+      value: execution
+      effect: NoSchedule
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 4096Mi
+    limits:
+      cpu: 2000m
+      memory: 8192Mi
+  volumes: []
+  volumeMounts: []
+
+
+genAi:
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/gen_search_service"
+  tag: "2024.12.1"
+  iamRole: ""
+  enabled: true
+  replicas: "1"
+  env:
+    - name: BEDROCK_REGION # This should not be hardcoded on Prod
+      value: "us-east-1"
+    - name: DATASTORE
+      value: elastic
+    - name: ELASTICSEARCH_HOST
+      valueFrom:
+        secretKeyRef:
+          name: elasticsearch
+          key: ELASTICSEARCH_HOST
+    - name: ELASTICSEARCH_INDEX
+      value: 'DEPRECATED_UNUSED'
+    - name: ENCODER
+      value: MiniLMEncoder
+    - name: GENERATOR
+      value: aws-claude-35
+    - name: RERANKER
+      value: minilm-l12
+    - name: QUERY_EXPANSION
+      value: "False"
+    - name: FLASK_URL
+      value: 'http://localhost:5000'
+    - name: RERANKER_SERVICE_URL
+      value: 'http://service-reranker-service.reveal-ai.svc.cluster.local/rank'
+  resources:
+    limits:
+      cpu: '2'
+      memory: 10Gi
+    requests:
+      cpu: '2'
+      memory: 10Gi
+  nodeSelector:
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+  tolerations:
+    - key: linux_gpu_enabled
+      operator: Equal
+      value: execution
+      effect: NoSchedule
+  PodDisruptionBudget:
+    name: PDB_gen_search_service
+    enabled: true
+    minAvailable: 1
+    maxUnavailable:
+
+reranker:
+  replicas: 1
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai/gen_search_service"
+  tag: "2024.11.7"
+  env:
+    - name: AWS_DEFAULT_REGION # This should not be hardcoded on Prod
+      value: "us-east-1"
+    - name: AWS_REGION # This should not be hardcoded on Prod
+      value: "us-east-1"
+    - name: BEDROCK_REGION # This should not be hardcoded on Prod
+      value: "us-east-1"
+    - name: DATASTORE
+      value: elastic
+    - name: ENCODER
+      value: MiniLMEncoder
+    - name: GENERATOR
+      value: aws-claude-35
+    - name: RERANKER
+      value: minilm-l12
+    - name: ELASTICSEARCH_INDEX
+      value: DEPRECATED_UNUSED
+    - name: ELASTICSEARCH_HOST
+      valueFrom:
+        secretKeyRef:
+          name: elasticsearch
+          key: ELASTICSEARCH_HOST
+    - name: QUERY_EXPANSION
+      value: "False"
+    - name: RERANK_SCORE_THRESHOLD
+      value: "0.3"
+  resources:
+    limits:
+      cpu: '1'
+      memory: 10Gi
+    requests:
+      cpu: '1'
+      memory: 10Gi
+  nodeSelector:
+    Usage: linux_gpu_enabled
+  tolerations:
+    - key: linux_gpu_enabled
+      operator: Equal
+      value: execution
+      effect: NoSchedule
