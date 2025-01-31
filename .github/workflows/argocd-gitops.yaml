@@ -3,7 +3,9 @@ name: Review-GitOps Manual Modifications
 on:
   push:
     paths:
-      - 'versions/**/processing-agent-config.yml'
+      - 'dev/**'
+      - 'prod/**'
+      - 'uat/**'
 
 jobs:
   determine-environment:
