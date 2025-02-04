@@ -1,0 +1,634 @@
+global:
+  # -- Optionally set a namespace value. If empty, the helm release name is used
+  namespace: "reveal-brainspace"
+  # -- Optionally disable the namespace creation as it may already exist
+  NoNamespace: false
+  # -- Optionally set a service account for the pods
+  serviceAccount:
+    name: ""
+    roleArn: ""
+  # -- env: An optional list of global environment variables
+  env: {}
+    # VAR_NAME: "value"
+
+  ecr:
+    enabled: false
+    secret: "reveal-ecr"
+    # -- AWS Account ID (default "053522176595")
+    account: ""
+    # -- ECR AWS Region (default "us-east-1")
+    region: ""
+    # -- Set the full hostname/url for the secret rather than building it with account and region
+    host: ""
+    # -- Docker ECR Password (required)
+    # -- Command: aws ecr get-login-password
+    password: ""
+
+storage:
+  # -- Persistent Storage Class
+  # -- Options:
+  # --- efs-sc: (https://github.com/kubernetes-sigs/aws-efs-csi-driver)
+  # --- pvc: Use pre-existing persistent volume claims
+  class: efs-sc
+
+  # -- File Permissions
+  # -- The following are the owner/group and permissions for the persistent storage volumes
+  # -- Volumes: pvc-shared-data, pvc-shared-logs, pvc-app-localdata, pvc-app-plugins, pvc-bt-data
+  # --- uid: 1604
+  # --- gid: 1604
+  # --- mode: 0775
+  # -- Volumes: pvc-db-data, pvc-rmq-data
+  # --- uid: 1001
+  # --- gid: 1001
+  # --- mode: 0775
+
+  # -- Options for class: efs-sc
+  efs:
+    # -- The EFS FileSystemId
+    fileSystemId: ""
+    # -- Shared /data EFS AccessPointId
+    SharedDataAccessPointId: ""
+    # -- Shared /logs EFS AccessPointId
+    SharedLogsAccessPointId: ""
+    # -- Brainspace APP /localdata EFS AccessPointId
+    AppLocalDataAccessPointId: ""
+    # -- Brainspace APP plugins EFS AccessPointId
+    AppPluginsAccessPointId: ""
+    # -- Brainspace BatchTools EFS AccessPointId
+    BtDataAccessPointId: ""
+    # -- Brainspace Database EFS AccessPointId
+    DatabaseDataAccessPointId: ""
+    # -- Brainspace RabbitMQ EFS AccessPointId
+    RabbitMQDataAccessPointId: ""
+
+  # -- Options for class: pvc
+  # -- The following volume claim names must already exist
+  # -- The values in 'values-template.yaml' are the defaults
+  pvc: {}
+    # -- Shared Data `/data` (accessMode: ReadWriteMany)
+    # sharedData: "pvc-shared-data"
+    # -- Application logs (accessMode: ReadWriteMany)
+    # sharedLogs: "pvc-shared-logs"
+    # -- Application Local Data `/localdata` (accessMode: ReadWriteMany)
+    # appLocalData: "pvc-app-localdata"
+    # -- Application Plugins (accessMode: ReadWriteOnce)
+    # appPlugins: "pvc-app-plugins"
+    # -- Shared BatchTools (accessMode: ReadWriteMany)
+    # BtData: "pvc-bt-data"
+    # -- Database (only required if brains_db.useContainer = true) (accessMode: ReadWriteOnce)
+    # databaseData: "pvc-db-data"
+    # -- RabbitMQ (only required if brains_rmq.useContainer = true) (accessMode: ReadWriteOnce)
+    # rabbitMQData: "pvc-rmq-data"
+
+secrets:
+  # -- The secrets provider
+  # -- Providers:
+  # --- external-secrets: (https://external-secrets.io/v0.5.9/)
+  # --- kubernetes: Use kubernetes secret. Add secrets to the 'kubernetes' section below.
+  provider: "kubernetes"
+
+  # -- OPTIONS FOR: 'external-secrets' -- #
+  externalSecrets:
+    # -- The external-secrets provider
+    # -- Providers:
+    # --- aws: AWS SecretsManager
+    # --- azurekv: Azure KeyVault
+    provider: aws
+    # -- Options for aws (AWS SecretsManager)
+    aws:
+      # -- Region: The AWS region where the secret resides (default "us-east-1")
+      region: "us-east-1"
+
+  # -- A list of secrets to create ('brainspace-secrets' is REQUIRED)
+  secretDefinitions:
+    # -- USAGE INSTRUCTIONS:
+      # -- eksSecretName = The name of the kubernetes secret to create
+    # - eksSecretName: "brainspace-secrets"
+      # -- awsSecretName = The name of the AWS Secret in Secrets Manager (aws only)
+      # awsSecretName: "eks/brainspace/prod"
+      # -- azureTenantId = The Azure KeyVault tenantId (azure only)
+      # azureTenantId: "some-tenant-id"
+      # -- azureVaultUrl = The Azure KeyVault URL (azure only)
+      # azureVaultUrl: "https://some-keyvault.vault.azure.net/"
+      # -- useExistingSecret = Disable the creation of a kubernetes secret if it already exists
+      # useExistingSecret: false
+      # -- data = A list of secrets to create or fetch from external-secrets
+      # data:
+          # -- secretKey = The name of the kubernetes secret item to create
+        # - secretKey: "brainspace_db_host"
+          # -- property (optional) = The name of the secret property to fetch from external-secrets
+          # property: "host"
+          # -- envVar (optional) = Cretae this secret as an environment variable in the pods
+          # envVar: "POSTGRESQL_HOST"
+          # -- value (optional) = Set a value for the secret if not using external-secrets
+          # value: "brains-db"
+          # -- mountPath (optional) = Mount the secret as a directory in the pods
+          # mountPath: "/var/secrets"
+    # -- The Required Secret definition for Brainspace
+    # -- DO NOT change the secretKey or envVar values for these secrets
+    - eksSecretName: "brainspace-secrets"
+      awsSecretName: "eks/brainspace/config-secrets"
+      azureTenantId: ""
+      azureVaultUrl: ""
+      useExistingSecret: false
+      data:
+        - secretKey: "brainspace_db_host"
+          property: "host"
+          envVar: "POSTGRESQL_HOST"
+          # value: "brains-db"
+        - secretKey: "brainspace_db_port"
+          property: "port"
+          envVar: "POSTGRESQL_PORT"
+          # value: "5432"
+        - secretKey: "brainspace_db_name"
+          property: "database"
+          envVar: "POSTGRESQL_DATABASE"
+          # value: "brainspace"
+        - secretKey: "brainspace_db_user"
+          property: "brainsDbUsername"
+          envVar: "POSTGRESQL_USERNAME"
+          # value: "brainspace"
+        - secretKey: "brainspace_db_password"
+          property: "brainsDbPassword"
+          envVar: "POSTGRESQL_PASSWORD"
+          # value: "brainspace1"
+        - secretKey: "rabbitmq_host"
+          property: "rabbitmqHost"
+          envVar: "RABBITMQ_HOST"
+          # value: "brains-rabbitmq"
+        - secretKey: "rabbitmq_port"
+          property: "rabbitmqPort"
+          envVar: "RABBITMQ_PORT"
+          # value: "5672"
+        - secretKey: "rabbitmq_use_ssl"
+          property: "rabbitmqUseSsl"
+          envVar: "RABBITMQ_USE_SSL"
+          # value: "false"
+        - secretKey: "rabbitmq_username"
+          property: "rabbitmqUsername"
+          envVar: "RABBITMQ_USERNAME"
+          # value: "brainspace"
+        - secretKey: "rabbitmq_password"
+          property: "rabbitmqPassword"
+          envVar: "RABBITMQ_PASSWORD"
+          # value: "brainspace1"
+        - secretKey: "rabbitmq_virtual_host"
+          property: "rabbitmqVhost"
+          envVar: "RABBITMQ_VHOST"
+          # value: "brainspace"
+
+    # -- Optionally add additional secrets here
+    # -- Example: add a brainspace license secret
+    # -- secretKey, volume and mountPath must be set to the values in this example
+    # - eksSecretName: "brainspace-license"
+    #   awsSecretName: "eks/brainspace/license"
+    #   useExistingSecret: false
+    #   data:
+    #     - secretKey: "brainspace_license.txt"
+    #       property: "license"
+    #       volume: "brainspace-license-vol"
+    #       mountPath: "/run/secrets/brainspace/license"
+
+ingress:
+  # -- Optionally disable the ingress
+  enabled: true
+  # -- The ingress class
+  # -- Options:
+  # --- alb: (AWS Application Load balancer - https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.4/)
+  # --- nginx: Nginx Ingress (https://kubernetes.github.io/ingress-nginx/)
+  class: "alb"
+  # -- Will the ingress use an internal or internet-facing load balancer
+  public: false
+  hostname: ""
+  # -- sslCertArn is only valid when using the 'alb' class
+  sslCertArn: ""
+  securityGroups: []
+  # -- Custom annotations for the ingress
+  annotations: {}
+  alb:
+    rules: []
+    paths: []
+    # AWS Security Groups to add to the ALB (SG name or ID)
+    securityGroups: []
+  nginx:
+    # -- A custom block for the nginx ingress that gets placed at the top of the ingress `spec` block.
+    spec_extras: {}
+
+brains_db:
+  # -- Use a PostgreSQL container and DatabaseDataAccessPointId
+  # -- If you are using Brainspace DB container, set secret's 'host' value to 'brains-db'
+  # -- false = using an outside database like AWS RDS
+  useContainer: false
+  replicaCount: "0"
+  # -- Brainspace database/postgres container image
+  image: "docker.io/bitnami/postgresql"
+  # -- batch database/postgres container tag
+  tag: "13.10.0"
+  # -- Add a K8s node selector for this deployment to run in
+  # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+  nodeSelector: {}
+  imagePullPolicy: "IfNotPresent"
+  # -- Force a re-deploy when a helm upgrade happens
+  reloadOnUpgrade: false
+  # -- specify a Kubernetes podSecurityContext for brains_db
+  podSecurityContext:
+    fsGroup: 1001
+  # -- specify a Kubernetes securityContext for brains_db
+  securityContext:
+    runAsUser: 1001
+    runAsGroup: 0
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    readOnlyRootFilesystem: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    memory: "2Gi"
+    cpu: "1"
+  options:
+    # -- Use an SSL connection to PostgreSQL .Set to 'false' if using the database container.
+    useSsl: true
+    # -- PostgreSQL Auth mechanism (md5, scram-sha-256)
+    # -- Use 'md5' only when scram-sha-256 is unavailable on the database
+    authMech: "scram-sha-256"
+
+brains_rabbitmq:
+  # -- Use a RabbitMQ container and RabbitMQDataAccessPointId
+  # -- If you are using Brainspace RabbitMQ container, set secret's 'host' value to 'brains-rabbitmq'
+  # -- false = using an outside RabbitMQ instance
+  useContainer: true
+  # -- Brainspace queue/RabbitMQ container image
+  image: "docker.io/bitnami/rabbitmq"
+  # -- Brainspace queue/RabbitMQ container tag
+  tag: "3.11.10-debian-11-r5"
+  # -- Add a K8s node selector for this deployment to run in
+  # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+  nodeSelector: {}
+  imagePullPolicy: "IfNotPresent"
+  # -- specify a Kubernetes podSecurityContext for brains_rabbitmq
+  podSecurityContext:
+    fsGroup: 1001
+  # -- specify a Kubernetes securityContext for brains_rabbitmq
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsUser: 1001
+    runAsGroup: 0
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    memory: "2Gi"
+    cpu: "1"
+
+brains_ui:
+  # Number of replicas for the UI workload
+  replicas: 1
+  # Brainspace UI container image
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/ui"
+  # Brainspace UI container tag
+  tag: "latest"
+  # -- Force a re-deploy when a helm upgrade happens
+  reloadOnUpgrade: true
+  # -- specify a Kubernetes podSecurityContext for brains_ui
+  podSecurityContext:
+    fsGroup: 10001
+  # -- specify a Kubernetes securityContext for brains_ui
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    memory: "1Gi"
+    cpu: "2"
+  # -- Add a K8s node selector for this deployment to run in
+  # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+  nodeSelector: {}
+  tolerations: []
+    # - effect: "NoSchedule"
+    #   key: "linux-small"
+    #   operator: "Exists"
+  # -- Specify customizations to the nginx proxy
+  proxyConfig: ""
+
+brains_bt:
+  # batch tools container image
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/brainspace/batch-tools"
+  # batch tools container tag
+  tag: "latest"
+  imagePullPolicy: "Always"
+
+brains_app:
+  # -- Brainspace APP container image
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/application"
+  # -- Brainspace APP container tag
+  tag: "latest"
+  # -- Brainspace home directory - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU ARE DOING
+  brainspaceHome: "/opt/bitnami/apache-tomcat"
+  # -- Brainspace Logs directory - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU ARE DOING
+  brainspaceLogs: "/opt/bitnami/apache-tomcat/logs"
+  # -- Brainspace license file from secret - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU ARE DOING
+  brainspaceLicenseFile: "/run/secrets/brainspace/license/brainspace_license.txt"
+  # -- Force a re-deploy when a helm upgrade happens
+  reloadOnUpgrade: false
+  # -- Add a K8s node selector for this deployment to run in
+  # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+  nodeSelector:
+    NodeGroupName: "linux_large_brs"
+  # -- Customize the JVM memory settings for the brains_app pods
+  jvmMemory:
+    # -- Auto calculate the max ram percentages (default: true)
+    # -- If false, then use the MaxRAMPercentage value below
+    # -- to calculate the max mem (-Xmx) from resource limits
+    # -- https://www.eclipse.org/openj9/docs/xxusecontainersupport/
+    useContainerSupport: true
+    # -- Maximum ram percentage (default: 73)
+    MaxRAMPercentage: "75"
+    # -- Maximum metaspace size (default: 256m)
+    MaxMetaspaceSize: "256m"
+  plugins:
+    # -- Brainspace APP plugins container image
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/plugins"
+    # -- Brainspace APP plugins container tag
+    tag: "latest"
+  additionalPlugins:
+    enabled: false
+    # -- Brainspace APP additional plugins container image
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/additional-plugins"
+    # Brainspace APP additional plugins container tag
+    tag: "latest"
+  # -- logs directory in persistent storage
+  logDir: "app"
+  # -- specify a Kubernetes podSecurityContext for brains_app
+  podSecurityContext:
+    fsGroup: 1604
+  # -- specify a Kubernetes securityContext for brains_app
+  securityContext:
+    runAsUser: 1604
+    runAsGroup: 0
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  # -- Define static resources for the brains_app pods
+  resources:
+    memory: 110
+    cpu: 12
+  # dataset autoDisable settings. Only use with Reveal 11 with review configured for auto-start
+  autoDisable:
+    enabled: false
+    # -- The number of seconds to wait before disabling a dataset
+    idleTimeSeconds: 86400
+    # -- Settings that control the dataset autoDisable job polling interval (in Minutes)
+    startWait: 15
+    sleepTime: 15
+  # liveness probe settings. If not set, the default values are used
+  livenessProbe:
+    initialDelaySeconds: 300
+    periodSeconds: 30
+    timeoutSeconds: 60
+    failureThreshold: 5
+  # startup probe settings. If not set, the default values are used
+  startupProbe:
+    initialDelaySeconds: 300
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 120
+  # -- Optionally set custom environment variables for Brainspace Application
+  env:
+    R11CONNECTOR_USE_MGET: "true"
+    BRAINS_APP_PROP___dataset__expansionCache: "false"
+    BRAINS_APP_PROP___dataset__boilerplateFilter: "false"
+    BRAINS_APP_PROP___dataset__focusCache: "false"
+    BRAINS_APP_PROP___dataset__facetCache: "false"
+    BRAINS_APP_PROP___dataset__tdmCache: "false"
+    BRAINS_APP_PROP___dataset__graphIndex: "false"
+    BRAINS_APP_PROP___dataset__search: "false"
+    BRAINS_APP_PROP___documentwriter__commit__timeout__seconds: "1200"
+    BRAINS_APP_PROP___dataset__autoDisable: "true"
+    BRAINS_APP_PROP___dataset__autoDisable__idleTimeSeconds: "43200"
+    BRAINS_APP_PROP___disable__initial: "5"
+    BRAINS_APP_PROP___disable__break: "5"
+    BRAINS_APP_PROP___disable__timeunit: "M"
+    BRAINS_APP_PROP___batchwriter__max__write__wait__millis: "600000"
+# -- Optionally set custom tolerations
+  tolerations: []
+    # - effect: "NoSchedule"
+    #     key: "linux-large"
+    #     operator: "Exists"
+
+brains_ana:
+  # -- Brainspace ANA (analytics) container image
+  image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/analytics-server"
+  # Brainspace ANA (analytics) container tag
+  tag: "latest"
+  # -- Brainspace home directory - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU ARE DOING
+  brainspaceHome: "/opt/bitnami/java"
+  # -- Brainspace Logs directory - DO NOT CHANGE UNLESS YOU KNOW WHAT YOU ARE DOING
+  brainspaceLogs: "/opt/bitnami/java/app/analytics-server/logs"
+  # -- Add a K8s node selector for this deployment to run in
+  # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+  nodeSelector: {}
+  # -- Do Not set higher than 0 (zero), unless .Values.brains_ana.autoscale.enabled = true
+  replicas: 0
+  # -- Force a re-deploy when a helm upgrade happens
+  reloadOnUpgrade: false
+  # -- localdata storage
+  storage:
+    # -- storage class
+    # -- Options:
+    # --- 'gp2' (must specify size in GB)
+    # --- 'emptyDir' (node local storage)
+    class: "emptyDir"
+    size: 4096
+
+  # -- Customize the JVM memory settings for the brains_ana pods
+  jvmMemory:
+    useContainerSupport: true
+    # -- Maximum ram percentage of resource limits for BT_HEAP_MAX (default: 75)
+    MaxRAMPercentage: "75"
+  # -- specify a Kubernetes podSecurityContext for brains_ana
+  podSecurityContext:
+    fsGroup: 1604
+  # -- specify a Kubernetes securityContext for brains_ana
+  securityContext:
+    runAsUser: 1604
+    runAsGroup: 1604
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  # -- Define static resources for the brains_ana pods
+  resources:
+    memory: 600
+    cpu: 60
+  # -- Optionally set custom environment variables for Brainspace Analytics
+  env:
+    # ENV_VAR: "env_value"
+    ANALYSIS_HEAP_MAX: "5g"
+    # -- Log Level settings
+    # -- Options: TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF
+    LOG4J_LEVEL: "INFO"
+    LOG_LEVEL: "INFO"
+    REJECT_LOG_LEVEL: "INFO"
+    RAI_BUCKET_NAME: "dev-us-east-1-reveal-ai"
+  # -- Optionally set custom tolerations
+  tolerations: []
+    # - effect: "NoSchedule"
+    #     key: "linux-large"
+    #     operator: "Exists"
+
+  # -- Use the ANA Auto-scaling pod
+  # -- Dataset build jobs will be executed as kubernetes jobs. Kubernetes node autoscaler is recommended.
+  autoscale:
+    # -- If false, then add replicas higher than 0 (zero) to the brains_ana
+    enabled: true
+    image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/brainspace/ana-autoscale"
+    tag: "11.10.3.1"
+    metrics:
+      enabled: true
+      port: 9300
+      pollingInterval: 15
+    # -- Log format for the ANA Auto-scaling pod
+    # -- Options: json, default
+    logFormat: "json"
+    reloadOnUpgrade: true
+    # -- Add a K8s node selector for this deployment to run in
+    # -- Example: eks.amazonaws.com/nodegroup: brainspace-nodegroup
+    nodeSelector: {}
+    # -- specify a Kubernetes podSecurityContext for ana-autoscale
+    podSecurityContext:
+      fsGroup: 1604
+    # -- specify a Kubernetes securityContext for ana-autoscale
+    securityContext:
+      runAsUser: 1604
+      runAsGroup: 1604
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+    tolerations: []
+    debug: "0"
+    thresholds:
+      # -- The minimum number of replicas of the brains_ana deployment
+      min: 0
+      # -- The maximum number of replicas of the brains_ana deployment
+      max: 10
+
+PodDisruptionBudget_ana_autoscale:
+  name: PDBana-autoscale
+  enabled: true
+  minAvailable: 1
+  maxUnavailable:
+
+PodDisruptionBudget_app:
+  name: PDBapp
+  enabled: true
+  minAvailable: 1
+  maxUnavailable:
+
+PodDisruptionBudget_db:
+  name: PDBdb
+  enabled: true
+  minAvailable: 1
+  maxUnavailable:
+
+PodDisruptionBudget_rmq:
+  name: PDBrmq
+  enabled: true
+  minAvailable: 1
+  maxUnavailable:
+
+PodDisruptionBudget_ui:
+  name: PDBui
+  enabled: true
+  minAvailable: 1
+  maxUnavailable:
+
+# -- Secret default parameters
+# -- DO NOT EDIT --
+defaults:
+  secrets:
+    brainspace_db_host:
+      property: "host"
+      value: "brains-db"
+      envVar: "POSTGRESQL_HOST"
+    brainspace_db_port:
+      property: "port"
+      value: "5432"
+      envVar: "POSTGRESQL_PORT"
+    brainspace_db_name:
+      property: "database"
+      value: "brainspace"
+      envVar: "POSTGRESQL_DATABASE"
+    brainspace_db_user:
+      property: "brainsDbUsername"
+      value: "brainspace"
+      envVar: "POSTGRESQL_USERNAME"
+    brainspace_db_password:
+      property: "brainsDbPassword"
+      value: "brainspace1"
+      envVar: "POSTGRESQL_PASSWORD"
+    brainspace_license.txt:
+      property: "license"
+      volume: "brainspace-license-vol"
+      mountPath: "/run/secrets/brainspace/license"
+      optional: true
+      readOnly: true
+    rabbitmq_host:
+      property: "rabbitmqHost"
+      value: "brains-rabbitmq"
+      envVar: "RABBITMQ_HOST"
+    rabbitmq_port:
+      property: "rabbitmqPort"
+      value: "5672"
+      envVar: "RABBITMQ_PORT"
+    rabbitmq_use_ssl:
+      property: "rabbitmqUseSsl"
+      value: "false"
+      envVar: "RABBITMQ_USE_SSL"
+    rabbitmq_username:
+      property: "rabbitmqUsername"
+      value: "brainspace"
+      envVar: "RABBITMQ_USERNAME"
+    rabbitmq_password:
+      property: "rabbitmqPassword"
+      value: "brainspace1"
+      envVar: "RABBITMQ_PASSWORD"
+    rabbitmq_virtual_host:
+      property: "rabbitmqVhost"
+      value: "brainspace"
+      envVar: "RABBITMQ_VHOST"
+    rabbitmq_max_channels:
+      property: "rabbitmqMaxChannels"
+      value: "9"
+      envVar: "RABBITMQ_MAX_CHANNELS"
+    rabbitmq_automatically_recovery:
+      property: "rabbitmqAutomaticRecovery"
+      value: "true"
+      envVar: "RABBITMQ_AUTOMATIC_RECOVERY"
