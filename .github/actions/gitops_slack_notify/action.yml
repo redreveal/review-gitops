@@ -4,7 +4,7 @@ description: "Handle Slack notifications for both review-gitops (region_envs.jso
 inputs:
   slack_webhook:
     description: "Slack Webhook URL"
-    required: false
+    required: false  # can be optional if you want to skip Slack sometimes
 
 runs:
   using: "composite"
@@ -25,72 +25,74 @@ runs:
           echo "No Slack webhook. Skipping."
           exit 0
         fi
-    
+
         if [ -f "review-gitops/regions_envs.json" ]; then
           echo "Detected region_envs.json => We'll do the 'review' approach."
-          # (review logic here …)
+
+          regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
+          if [ -z "$regions_envs" ]; then
+            echo "No changed regions in region_envs.json. Skipping Slack notify."
+            exit 0
+          fi
+
+          for region_env in $regions_envs; do
+            _jq() {
+              echo "$region_env" | base64 --decode | jq -r ${1}
+            }
+            REGION=$(_jq '.region')
+            ENV=$(_jq '.env')
+            
+            echo "Posting Slack for $ENV/$REGION..."
+            FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
+
+            if [ -f "$FILE" ]; then
+              python $GITHUB_ACTION_PATH/slack_notify.py "$FILE" "$ENV" "$REGION" "auto"
+            else
+              echo "File $FILE not found, skipping $ENV/$REGION"
+            fi
+          done
         else
           echo "No review-gitops/regions_envs.json found => Proceeding with RevealAI-GitOps Helm Slack notifications."
-    
+
           if [ ! -f "helm_changed_files.json" ]; then
             echo "No helm_changed_files.json found. Skipping Slack notifications for Helm."
             exit 0
           fi
-    
+
           changed_files=$(jq -r '.[]' helm_changed_files.json)
           if [ -z "$changed_files" ]; then
             echo "Empty helm_changed_files.json. Skipping Slack notifications for Helm."
             exit 0
           fi
-    
-          for f in $changed_files; do
-            # Find all candidates for the changed file.
-            candidate_file=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f")
-            FILE=""
-            for candidate in $candidate_file; do
-              # Remove the workspace prefix.
-              rel=${candidate#"$GITHUB_WORKSPACE/"}
-              # Remove the checkout folder (first segment).
-              rel_no_prefix=$(echo "$rel" | cut -d'/' -f2-)
-              if [ "$rel_no_prefix" = "$f" ]; then
-                FILE="$candidate"
-                break
+        
+          if [ -d "revealai-gitops" ]; then
+                  checkout_repo="revealai-gitops"
+              elif [ -d "brainspace-gitops" ]; then
+                  checkout_repo="brainspace-gitops"
+              else
+                  checkout_repo="${GITHUB_REPOSITORY#*/}"
               fi
-            done
-          
-            if [ -z "$FILE" ]; then
-              echo "File $f not found in the expected location. Skipping."
-              continue
-            fi
-          
-            echo "Found file: $FILE"
-          
-            # Trim the absolute path to a repo-internal path.
-            FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
-            # Remove the checkout folder (the first segment)
-            relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
-            echo "Relative file path: $relative_path"
-          
-            # Split the relative path into segments.
-            IFS='/' read -r -a segments <<< "$relative_path"
-            if [ ${#segments[@]} -eq 3 ]; then
-              # Pattern: <env>/<region>/values.yaml (e.g. brainspace)
-              ENV="${segments[0]}"
-              REGION="${segments[1]}"
-            elif [ ${#segments[@]} -ge 4 ]; then
-              # Pattern: <prefix>/<env>/<region>/values.yaml (e.g. RAI or RAI-bootstrap)
-              ENV="${segments[1]}"
-              REGION="${segments[2]}"
-            else
-              echo "Unexpected file path format: $relative_path. Skipping."
-              continue
-            fi
-          
-            echo "Using ENV=${ENV} and REGION=${REGION}"
-          
-            # Now pass the trimmed, relative path (rather than the full absolute file path) to the Python script.
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$relative_path" "$ENV" "$REGION" "helm"
-          done
 
-          echo "Completed Slack notifications."
+          for f in $changed_files; do
+            if echo "$f" | grep -q "^RAI/"; then
+              after_subfolder=$(echo "$f" | sed 's|^RAI/||')
+            else
+              after_subfolder="$f"
+            fi
+
+            ENV=$(echo "$after_subfolder" | cut -d'/' -f1)
+            REGION=$(echo "$after_subfolder" | cut -d'/' -f2)
+
+            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
+              echo "Could not parse ENV or REGION from path: $f. Skipping."
+              continue
+            fi
+
+            FILE="${checkout_repo}/$f"
+
+            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${f}"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
+          done
         fi
+
+        echo "Completed Slack notifications."
