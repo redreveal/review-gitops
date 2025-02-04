@@ -73,7 +73,9 @@ runs:
               else
                   checkout_repo="${GITHUB_REPOSITORY#*/}"
               fi
-
+          aggregated_list_file="aggregated_files.txt"
+          > "$aggregated_list_file"
+        
           for f in $changed_files; do
             if echo "$f" | grep -q "^RAI/"; then
               sub=$(echo "$f" | sed 's|^RAI/||')
@@ -90,6 +92,7 @@ runs:
             fi
         
             HELM_FILE="${checkout_repo}/$f"
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$HELM_FILE" "$ENV" "$REGION" "helm"
+            echo "$HELM_FILE" >> "$aggregated_list_file"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" helm "$aggregated_list_file"
           done
         fi
