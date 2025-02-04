@@ -528,7 +528,7 @@ nia:
 
   nia_worker:
     image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/prod/reveal_ai_integration/reveal_ai_integration"
-    tag: "2024.8.0"
+    tag: "2024.8.1"
     env:
       - name: "TARGET_SERVICE"
         value: "NIA_WORKER"
