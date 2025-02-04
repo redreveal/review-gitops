@@ -293,7 +293,7 @@ brains_ui:
   # Brainspace UI container image
   image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/brainspace/ui"
   # Brainspace UI container tag
-  tag: "latest"
+  tag: "Latest"
   # -- Force a re-deploy when a helm upgrade happens
   reloadOnUpgrade: true
   # -- specify a Kubernetes podSecurityContext for brains_ui
