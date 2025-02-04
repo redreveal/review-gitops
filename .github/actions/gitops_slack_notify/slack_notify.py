@@ -53,15 +53,38 @@ def post_to_slack(slack_webhook, message):
 def aggregate_helm_values(file_paths):
     """
     Aggregate version data from multiple helm values files.
-    We search each file for image and tag references and group by chart.
+    This version expects that each helm values file is a YAML mapping whose
+    top-level keys include service groups (for example: serviceWatcher,
+    automation, etc.) and that each such service value is a dict containing
+    "image" and "tag". It extracts the short image name (by stripping off the
+    registry portion) and aggregates the tag by region.
+
+    The returned structure is:
+      {
+        serviceGroup1: {
+           short_image_name1: { region: tag, ... },
+           short_image_name2: { region: tag, ... }
+        },
+        serviceGroup2: {
+           short_image_name3: { region: tag, ... },
+           ...
+        },
+        ...
+      }
     """
-    aggregated = defaultdict(dict)  # chart -> { region: tag }
+    from collections import defaultdict
+    aggregated = {}  # Use a normal dict for easier formatting later.
+
     for file_path in file_paths:
-        # Split the file path into parts.
+        # Extract environment and region from the file path.
+        # For example, a file path like:
+        #   revealai-gitops/RAI/prod/eu-west-1/values.yaml
+        # We assume:
+        #   parts[0]: checkout folder (e.g. "revealai-gitops")
+        #   parts[1]: extra prefix (e.g. "RAI") – optional
+        #   parts[2]: environment (e.g. "prod")
+        #   parts[3]: region (e.g. "eu-west-1")
         parts = file_path.split(os.sep)
-        # Determine environment and region based on repository structure.
-        # If parts[1] is an extra prefix (e.g. "RAI" or "RAI-bootstrap"), use parts[2] and parts[3].
-        # Otherwise, use parts[1] and parts[2].
         if len(parts) >= 4 and parts[1] in ["RAI", "RAI-bootstrap"]:
             env = parts[2]
             region = parts[3]
@@ -78,50 +101,63 @@ def aggregate_helm_values(file_paths):
             print(f"Error loading YAML from {file_path}: {e}")
             continue
 
-        found_images = []
+        # Iterate over top-level keys that we consider as service groups.
+        for service_group, service_data in data.items():
+            # Check that this is a dict and that it contains "image" and "tag".
+            if not (isinstance(service_data, dict) and "image" in service_data and "tag" in service_data):
+                continue
 
-        def find_images_recursively(obj, path=""):
-            if isinstance(obj, dict):
-                if "image" in obj and "tag" in obj:
-                    found_images.append({
-                        "path": path.strip("/") or "root",
-                        "full_image": obj["image"],
-                        "tag": obj["tag"]
-                    })
-                for k, v in obj.items():
-                    new_path = f"{path}/{k}"
-                    find_images_recursively(v, new_path)
-            elif isinstance(obj, list):
-                for idx, item in enumerate(obj):
-                    new_path = f"{path}/{idx}"
-                    find_images_recursively(item, new_path)
+            # Use the top-level key as the service group.
+            # Get the image and tag.
+            image_value = service_data["image"]
+            tag_value = service_data["tag"]
 
-        find_images_recursively(data)
+            # Derive a short image name by removing the registry portion.
+            # For example, split on '/' and take everything from the second element.
+            parts_img = image_value.split('/')
+            if len(parts_img) >= 2:
+                short_image = '/'.join(parts_img[1:])  # e.g. "prod/reveal_ai/servicewatcher"
+            else:
+                short_image = image_value
 
-        def short_image_name(full_image):
-            splitted = full_image.split('/', 1)
-            if len(splitted) == 2:
-                return splitted[1]  # removes any repository prefix
-            return full_image
-
-        for item in found_images:
-            chart = short_image_name(item["full_image"])
-            # Record the tag for this region.
-            # If the same chart appears in multiple files for the same region,
-            # the latest processed tag will win.
-            aggregated[chart][region] = item["tag"]
+            # Initialize nested dictionaries.
+            if service_group not in aggregated:
+                aggregated[service_group] = {}
+            if short_image not in aggregated[service_group]:
+                aggregated[service_group][short_image] = {}
+            # Record the tag under the detected region.
+            aggregated[service_group][short_image][region] = tag_value
 
     return aggregated
 
 
 def format_aggregated_helm_message(aggregated, base_file, environment, region, argocd_url):
+    """
+    Format the aggregated version data into a Slack message.
+
+    The output will look like:
+
+    serviceWatcher:
+      prod/reveal_ai/servicewatcher:
+          us-east-1 : 2024.11.4
+          eu-west-1 : 2024.11.4
+    automation:
+      prod/automation/reveal-ai-automation:
+          us-east-1 : 2024.11.1
+          eu-west-1 : 2024.11.1
+    ...
+
+    Then the ArgoCD URL line is appended.
+    """
     lines = []
     lines.append(f":bell: *Helm Values Aggregated Update for* `{base_file}`")
     lines.append("```")
-    for chart, region_versions in aggregated.items():
-        lines.append(f" - {chart}:")
-        for reg, version in region_versions.items():
-            lines.append(f"    {reg} : {version}")
+    for service_group, service_dict in aggregated.items():
+        lines.append(f"{service_group}:")
+        for short_image, region_versions in service_dict.items():
+            lines.append(f"  {short_image}:")
+            for reg, version in region_versions.items():
+                lines.append(f"    {reg} : {version}")
     lines.append("```")
     lines.append(f":point_right: *ArgoCD:* <{argocd_url}|ArgoCD URL for {environment}/{region}>")
     lines.append("\n---\n")
