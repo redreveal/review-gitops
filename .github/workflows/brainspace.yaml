@@ -1,4 +1,4 @@
-name: Revealai-GitOps Workflow
+name: Brainspace-GitOps Workflow
 
 on:
   push:
