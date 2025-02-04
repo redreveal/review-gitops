@@ -50,40 +50,61 @@ def post_to_slack(slack_webhook, message):
 
 ### NEW: Functions for Aggregated Helm Mode
 
-def aggregate_helm_values(file_paths):
+def recursively_collect_services(data, parent_key=""):
     """
-    Aggregate version data from multiple helm values files.
-    This version expects that each helm values file is a YAML mapping whose
-    top-level keys include service groups (for example: serviceWatcher,
-    automation, etc.) and that each such service value is a dict containing
-    "image" and "tag". It extracts the short image name (by stripping off the
-    registry portion) and aggregates the tag by region.
+    Recursively traverse the data to collect services that have both "image" and "tag".
+    Returns a list of tuples: (service_name, image, tag)
+    where service_name is taken as the last part of the dot‑separated key path.
+    For example, if a nested key is "automation.cosmicAutomation", this function
+    returns ("cosmicAutomation", image, tag).
+    """
+    services = []
+    if isinstance(data, dict):
+        # If this dictionary itself has both image and tag, consider it a service.
+        if "image" in data and "tag" in data:
+            # Use the last part of the parent key as the service name.
+            service_name = parent_key.split('.')[-1] if parent_key else ""
+            services.append((service_name, data["image"], data["tag"]))
+        else:
+            # Otherwise, traverse further into the dictionary.
+            for key, value in data.items():
+                new_key = f"{parent_key}.{key}" if parent_key else key
+                services.extend(recursively_collect_services(value, new_key))
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            new_key = f"{parent_key}[{idx}]"
+            services.extend(recursively_collect_services(item, new_key))
+    return services
 
-    The returned structure is:
+
+def aggregate_helm_values_with_nested(file_paths):
+    """
+    Process each file from the aggregated list.
+    Extract the region (and environment) from the file path,
+    then recursively collect all services (even nested ones) and aggregate by service name.
+
+    The aggregated structure will be:
       {
-        serviceGroup1: {
-           short_image_name1: { region: tag, ... },
-           short_image_name2: { region: tag, ... }
-        },
-        serviceGroup2: {
-           short_image_name3: { region: tag, ... },
-           ...
-        },
-        ...
+         serviceName1: {   # e.g. "serviceWatcher"
+             short_image1: { region: tag, ... },
+             ...
+         },
+         serviceName2: {   # e.g. "cosmicAutomation"
+             short_image2: { region: tag, ... },
+             ...
+         },
+         ...
       }
     """
     from collections import defaultdict
-    aggregated = {}  # Use a normal dict for easier formatting later.
-
+    aggregated = defaultdict(lambda: defaultdict(dict))
     for file_path in file_paths:
-        # Extract environment and region from the file path.
-        # For example, a file path like:
-        #   revealai-gitops/RAI/prod/eu-west-1/values.yaml
-        # We assume:
-        #   parts[0]: checkout folder (e.g. "revealai-gitops")
-        #   parts[1]: extra prefix (e.g. "RAI") – optional
-        #   parts[2]: environment (e.g. "prod")
-        #   parts[3]: region (e.g. "eu-west-1")
+        # Determine environment and region from the file path.
+        # For example, for a file path like:
+        #    revealai-gitops/RAI/prod/eu-west-1/values.yaml
+        # if parts[1] is "RAI" or "RAI-bootstrap", then:
+        #   environment = parts[2], region = parts[3]
+        # Otherwise, use parts[1] and parts[2].
         parts = file_path.split(os.sep)
         if len(parts) >= 4 and parts[1] in ["RAI", "RAI-bootstrap"]:
             env = parts[2]
@@ -101,33 +122,17 @@ def aggregate_helm_values(file_paths):
             print(f"Error loading YAML from {file_path}: {e}")
             continue
 
-        # Iterate over top-level keys that we consider as service groups.
-        for service_group, service_data in data.items():
-            # Check that this is a dict and that it contains "image" and "tag".
-            if not (isinstance(service_data, dict) and "image" in service_data and "tag" in service_data):
-                continue
-
-            # Use the top-level key as the service group.
-            # Get the image and tag.
-            image_value = service_data["image"]
-            tag_value = service_data["tag"]
-
+        # Recursively collect all service definitions.
+        services = recursively_collect_services(data)
+        for service_name, image, tag in services:
             # Derive a short image name by removing the registry portion.
-            # For example, split on '/' and take everything from the second element.
-            parts_img = image_value.split('/')
+            parts_img = image.split('/')
             if len(parts_img) >= 2:
                 short_image = '/'.join(parts_img[1:])  # e.g. "prod/reveal_ai/servicewatcher"
             else:
-                short_image = image_value
-
-            # Initialize nested dictionaries.
-            if service_group not in aggregated:
-                aggregated[service_group] = {}
-            if short_image not in aggregated[service_group]:
-                aggregated[service_group][short_image] = {}
-            # Record the tag under the detected region.
-            aggregated[service_group][short_image][region] = tag_value
-
+                short_image = image
+            # Group by the service name (from the last key in the path) and by short image.
+            aggregated[service_name][short_image][region] = tag
     return aggregated
 
 
@@ -135,7 +140,7 @@ def format_aggregated_helm_message(aggregated, base_file, environment, region, a
     """
     Format the aggregated version data into a Slack message.
 
-    The output will look like:
+    For example, the output will look like:
 
     serviceWatcher:
       prod/reveal_ai/servicewatcher:
@@ -145,9 +150,11 @@ def format_aggregated_helm_message(aggregated, base_file, environment, region, a
       prod/automation/reveal-ai-automation:
           us-east-1 : 2024.11.1
           eu-west-1 : 2024.11.1
+    cosmicAutomation:
+      prod/automation/reveal_ai_cosmic_automation:
+          us-east-1 : 2024.11.1
+          eu-west-1 : 2024.11.1
     ...
-
-    Then the ArgoCD URL line is appended.
     """
     lines = []
     lines.append(f":bell: *Helm Values Aggregated Update for* `{base_file}`")
