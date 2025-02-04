@@ -177,7 +177,7 @@ automation:
   vectorsAutomation:
     enabled: true
     image: "053522176595.dkr.ecr.us-east-1.amazonaws.com/dev/automation/reveal_ai_vectors_automation"
-    tag: "latest"
+    tag: "Latest"
     nodeSelector:
       kubernetes.io/os: linux
       kubernetes.io/arch: amd64
