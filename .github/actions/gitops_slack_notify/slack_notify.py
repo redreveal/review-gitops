@@ -19,7 +19,7 @@ ARGO_URLS = {
         "eu-central-1": "https://argocd.eu-central-1.revealglobal.cloud/",
         "eu-west-1": "https://argocd.eu-west-1.revealglobal.cloud/",
         "eu-west-2": "https://argocd.eu-west-2.revealglobal.cloud/",
-        "me-central-1" "https://argocd.me-central-1.revealglobal.cloud/"
+        "me-central-1": "https://argocd.me-central-1.revealglobal.cloud/"
     }
 }
 
