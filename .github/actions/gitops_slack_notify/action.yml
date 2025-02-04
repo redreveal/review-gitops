@@ -65,76 +65,41 @@ runs:
             exit 0
           fi
         
-#          if [ -d "revealai-gitops" ]; then
-#                  checkout_repo="revealai-gitops"
-#              elif [ -d "brainspace-gitops" ]; then
-#                  checkout_repo="brainspace-gitops"
-#              else
-#                  checkout_repo="${GITHUB_REPOSITORY#*/}"
-#              fi
-#
-#          for f in $changed_files; do
-#            if echo "$f" | grep -q "^RAI/"; then
-#              after_subfolder=$(echo "$f" | sed 's|^RAI/||')
-#            else
-#              after_subfolder="$f"
-#            fi
-#
-#            ENV=$(echo "$after_subfolder" | cut -d'/' -f1)
-#            REGION=$(echo "$after_subfolder" | cut -d'/' -f2)
-#
-#            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
-#              echo "Could not parse ENV or REGION from path: $f. Skipping."
-#              continue
-#            fi
-#
-#            FILE="${checkout_repo}/$f"
-#
-#            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${f}"
-#            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
-#          done
-#        fi
-#
-#        echo "Completed Slack notifications."
-    
           for f in $changed_files; do
-            # Search for the file anywhere under the workspace that ends with the relative path "$f"
-            FILE=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f" -print -quit)
-            if [ -z "$FILE" ]; then
-              echo "File $f not found in any subfolder. Skipping."
-              continue
-            fi
-          
-            # Convert the absolute file path to a workspace-relative path.
-            FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
-            echo "Found file: $FILE_REL"
+          # Dynamically search for the file anywhere under the workspace that ends with $f.
+          FILE=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f" -print -quit)
+          if [ -z "$FILE" ]; then
+            echo "File $f not found in any subfolder. Skipping."
+            continue
+          fi
 
-            # Remove the first segment (which is the checkout folder) to get the path inside the repo.
-            # For example, if FILE_REL is "revealai-gitops/RAI/uat/us-east-1/values.yaml",
-            # then relative_path becomes "RAI/uat/us-east-1/values.yaml".
-            relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
-            echo "Relative file path: $relative_path"
+          # Make the file path relative to the workspace.
+          FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
+          echo "Found file: $FILE_REL"
 
-            # Now, determine ENV and REGION by splitting the relative path.
-            # We assume one of two patterns:
-            #   1. With an extra prefix: [optional_prefix]/<env>/<region>/values.yaml
-            #   2. Without prefix: <env>/<region>/values.yaml
-            IFS='/' read -r seg1 seg2 seg3 seg4 <<< "$relative_path"
-            if [ -n "$seg3" ]; then
-              # Pattern 1: We have an extra prefix.
-              ENV="$seg2"
-              REGION="$seg3"
-            else
-              # Pattern 2: No extra prefix.
-              ENV="$seg1"
-              REGION="$seg2"
-            fi
-          
-            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
-              echo "Could not parse ENV or REGION from path: $f. Skipping."
-              continue
-            fi
+          # Remove the checkout folder (the first segment) so we work with the repo-internal structure.
+          relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
+          echo "Relative file path: $relative_path"
 
-            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${FILE}"
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
-          done
+          # Dynamically extract ENV and REGION by splitting the relative path.
+          IFS='/' read -r seg1 seg2 seg3 seg4 <<< "$relative_path"
+          if [ -n "$seg3" ]; then
+            # Assume pattern: <prefix>/<env>/<region>/values.yaml
+            ENV="$seg2"
+            REGION="$seg3"
+          else
+            # Assume pattern: <env>/<region>/values.yaml
+            ENV="$seg1"
+            REGION="$seg2"
+          fi
+
+          if [ -z "$ENV" ] || [ -z "$REGION" ]; then
+            echo "Could not parse ENV or REGION from path: $f. Skipping."
+            continue
+          fi
+
+          echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${FILE}"
+          python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
+        done
+
+        echo "Completed Slack notifications."
