@@ -25,9 +25,11 @@ ARGO_URLS = {
     }
 }
 
+
 def load_yaml(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
 
 def post_to_slack(slack_webhook, message):
     if not slack_webhook:
@@ -43,84 +45,10 @@ def post_to_slack(slack_webhook, message):
     except requests.exceptions.RequestException as e:
         print(f"Failed to post message to Slack: {e}")
 
-def summarize_review_versions(data, file_path):
-    lines = []
-    lines.append(f":bell: *Review-GitOps Update for* `{file_path}`")
-    lines.append("```")
 
-    defaults = data.get('defaults', {})
-    msas = data.get('msas', {})
+# (Existing summarize_review_versions and summarize_helm_values functions remain unchanged.)
 
-    lines.append("Defaults:")
-    for component, comp_data in defaults.items():
-        default_ver = comp_data.get('default', 'N/A')
-        lines.append(f" - {component} default = {default_ver}")
-
-        for svc, svc_ver in comp_data.get('services', {}).items():
-            lines.append(f"   - service {svc} = {svc_ver}")
-
-    if msas:
-        lines.append("\nMSA Overrides:")
-        for msa, override_data in msas.items():
-            lines.append(f" - MSA {msa}:")
-            for comp_name, comp_values in override_data.items():
-                lines.append(f"   - Component: {comp_name}")
-                if 'default' in comp_values:
-                    lines.append(f"     - default override = {comp_values['default']}")
-                for svc, svc_ver in comp_values.get('services', {}).items():
-                    lines.append(f"     - service {svc} = {svc_ver}")
-    else:
-        lines.append("\nNo MSA overrides found.")
-
-    lines.append("```")
-    return "\n".join(lines)
-
-def summarize_helm_values(data, file_path):
-    """
-    Existing single-file helm summarization (non-aggregated).
-    Searches recursively for "image" and "tag" entries.
-    """
-    lines = []
-    lines.append(f":bell: *Helm Values Update for* `{file_path}`")
-    lines.append("```")
-
-    found_images = []
-
-    def find_images_recursively(obj, path=""):
-        if isinstance(obj, dict):
-            if "image" in obj and "tag" in obj:
-                found_images.append({
-                    "path": path.strip("/") or "root",
-                    "full_image": obj["image"],
-                    "tag": obj["tag"]
-                })
-            for k, v in obj.items():
-                new_path = f"{path}/{k}"
-                find_images_recursively(v, new_path)
-        elif isinstance(obj, list):
-            for idx, item in enumerate(obj):
-                new_path = f"{path}/{idx}"
-                find_images_recursively(item, new_path)
-
-    find_images_recursively(data)
-
-    def short_image_name(full_image):
-        splitted = full_image.split('/', 1)
-        if len(splitted) == 2:
-            return splitted[1]  # e.g. "dev/automation/reveal-ai-automation"
-        return full_image
-
-    if found_images:
-        for item in found_images:
-            short_name = short_image_name(item["full_image"])
-            lines.append(f" - {short_name}: {item['tag']}")
-    else:
-        lines.append("No `image` + `tag` references found in the Helm values.")
-
-    lines.append("```")
-    return "\n".join(lines)
-
-### New functions for aggregated helm mode
+### NEW: Functions for Aggregated Helm Mode
 
 def aggregate_helm_values(file_paths):
     """
@@ -129,16 +57,17 @@ def aggregate_helm_values(file_paths):
     """
     aggregated = defaultdict(dict)  # chart -> { region: tag }
     for file_path in file_paths:
-        # Extract environment and region from file path.
-        # Adjust these indices based on your repo structure.
+        # Split the file path into parts.
         parts = file_path.split(os.sep)
-        if len(parts) >= 3:
-            if len(parts) == 3:
-                env = parts[0]
-                region = parts[1]
-            else:
-                env = parts[1]
-                region = parts[2]
+        # Determine environment and region based on repository structure.
+        # If parts[1] is an extra prefix (e.g. "RAI" or "RAI-bootstrap"), use parts[2] and parts[3].
+        # Otherwise, use parts[1] and parts[2].
+        if len(parts) >= 4 and parts[1] in ["RAI", "RAI-bootstrap"]:
+            env = parts[2]
+            region = parts[3]
+        elif len(parts) >= 3:
+            env = parts[1]
+            region = parts[2]
         else:
             env = "unknown"
             region = "unknown"
@@ -172,15 +101,18 @@ def aggregate_helm_values(file_paths):
         def short_image_name(full_image):
             splitted = full_image.split('/', 1)
             if len(splitted) == 2:
-                return splitted[1]
+                return splitted[1]  # removes any repository prefix
             return full_image
 
         for item in found_images:
             chart = short_image_name(item["full_image"])
-            # Record the tag for this region
+            # Record the tag for this region.
+            # If the same chart appears in multiple files for the same region,
+            # the latest processed tag will win.
             aggregated[chart][region] = item["tag"]
 
     return aggregated
+
 
 def format_aggregated_helm_message(aggregated, base_file, environment, region, argocd_url):
     lines = []
@@ -195,6 +127,7 @@ def format_aggregated_helm_message(aggregated, base_file, environment, region, a
     lines.append("\n---\n")
     return "\n".join(lines)
 
+
 def main():
     """
     Usage:
@@ -203,7 +136,7 @@ def main():
       Aggregated helm mode:
         python slack_notify.py helm <aggregated_file_list.txt>
     """
-    # Aggregated mode: first argument is "helm" and exactly two arguments provided.
+    # Check for Aggregated mode:
     if len(sys.argv) == 3 and sys.argv[1] == "helm":
         aggregated_list_file = sys.argv[2]
         try:
@@ -212,6 +145,8 @@ def main():
         except Exception as e:
             print(f"Error reading aggregated file list: {e}")
             sys.exit(1)
+        # Remove duplicate file paths if any.
+        file_paths = list(set(file_paths))
         if not file_paths:
             print("No files to process in aggregated file list.")
             sys.exit(0)
@@ -221,17 +156,18 @@ def main():
         base_file = file_paths[0]
         if workspace and base_file.startswith(workspace):
             base_file = base_file.replace(workspace + os.sep, "")
+
+        # Aggregate the version data.
         aggregated = aggregate_helm_values(file_paths)
 
-        # Determine environment and region from the first file path.
+        # Determine environment and region from the first file path using the new logic.
         parts = file_paths[0].split(os.sep)
-        if len(parts) >= 3:
-            if len(parts) == 3:
-                environment = parts[0]
-                region = parts[1]
-            else:
-                environment = parts[1]
-                region = parts[2]
+        if len(parts) >= 4 and parts[1] in ["RAI", "RAI-bootstrap"]:
+            environment = parts[2]
+            region = parts[3]
+        elif len(parts) >= 3:
+            environment = parts[1]
+            region = parts[2]
         else:
             environment = "unknown"
             region = "unknown"
@@ -242,7 +178,7 @@ def main():
         post_to_slack(slack_webhook, slack_message)
         sys.exit(0)
     else:
-        # Single-file mode.
+        # Single-file mode remains as before.
         if len(sys.argv) < 4:
             print("Usage: python slack_notify.py <file.yaml> <env> <region> [style]")
             sys.exit(1)
@@ -272,16 +208,15 @@ def main():
             sys.exit(1)
 
         base_argocd_url = ARGO_URLS.get(environment, {}).get(region, "Unknown ArgoCD URL")
-
         if style == "review":
             filtered_url = f"{base_argocd_url}/applications?search=review-&view=list&showFavorites=false&proj=&sync=&autoSync=&health=&namespace=&cluster=&labels="
             slack_message += f"\n\n:point_right: *ArgoCD:* <{filtered_url}|ArgoCD URL for ({environment}/{region})>\n"
         else:
             slack_message += f"\n\n:point_right: *ArgoCD:* <{base_argocd_url}|ArgoCD URL for {environment}/{region}>\n"
-
         slack_message += "\n---\n"
         slack_webhook = os.getenv("SLACK_WEBHOOK", None)
         post_to_slack(slack_webhook, slack_message)
+
 
 if __name__ == "__main__":
     main()

@@ -93,6 +93,7 @@ runs:
         
             HELM_FILE="${checkout_repo}/$f"
             echo "$HELM_FILE" >> "$aggregated_list_file"
+            cat aggregated_files.txt
             python "$GITHUB_ACTION_PATH/slack_notify.py" helm "$aggregated_list_file"
           done
         fi
