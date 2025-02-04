@@ -1,20 +1,24 @@
 name: "GitOps Slack Notify"
-description: "Handle Slack notifications for both review-gitops (region_envs.json) and reveal-ai (helm)."
+description: "Send Slack notifications for Review/RAI/Brainspace GitOps"
 
 inputs:
+  env_type:
+    description: "Environment (prod, dev, uat)"
+    required: false
+    default: ""
   slack_webhook:
-    description: "Slack Webhook URL"
-    required: false  # can be optional if you want to skip Slack sometimes
+    description: "Slack Webhook for notifications"
+    required: false
 
 runs:
   using: "composite"
   steps:
-    - name: Install Dependencies
+    - name: Python Dependencies
       shell: bash
       run: |
         pip install requests pyyaml
 
-    - name: Slack Notify Summaries
+    - name: Slack Notification
       shell: bash
       env:
         SLACK_WEBHOOK: ${{ inputs.slack_webhook }}
@@ -22,12 +26,12 @@ runs:
         set -e
 
         if [ -z "$SLACK_WEBHOOK" ]; then
-          echo "No Slack webhook. Skipping."
+          echo "No Slack webhook provided on the workflow. Skipping."
           exit 0
         fi
 
         if [ -f "review-gitops/regions_envs.json" ]; then
-          echo "Detected region_envs.json => We'll do the 'review' approach."
+          echo "Detected region_envs.json."
 
           regions_envs=$(cat review-gitops/regions_envs.json | jq -r '.[] | @base64')
           if [ -z "$regions_envs" ]; then
@@ -42,7 +46,6 @@ runs:
             REGION=$(_jq '.region')
             ENV=$(_jq '.env')
             
-            echo "Posting Slack for $ENV/$REGION..."
             FILE="review-gitops/${ENV}/${REGION}/versions.yaml"
 
             if [ -f "$FILE" ]; then
@@ -52,16 +55,14 @@ runs:
             fi
           done
         else
-          echo "No review-gitops/regions_envs.json found => Proceeding with RevealAI-GitOps Helm Slack notifications."
-
           if [ ! -f "helm_changed_files.json" ]; then
-            echo "No helm_changed_files.json found. Skipping Slack notifications for Helm."
+            echo "No helm_changed_files.json found."
             exit 0
           fi
 
           changed_files=$(jq -r '.[]' helm_changed_files.json)
           if [ -z "$changed_files" ]; then
-            echo "Empty helm_changed_files.json. Skipping Slack notifications for Helm."
+            echo "Empty helm_changed_files.json."
             exit 0
           fi
         
@@ -75,24 +76,20 @@ runs:
 
           for f in $changed_files; do
             if echo "$f" | grep -q "^RAI/"; then
-              after_subfolder=$(echo "$f" | sed 's|^RAI/||')
+              sub=$(echo "$f" | sed 's|^RAI/||')
             else
-              after_subfolder="$f"
+              sub="$f"
             fi
 
-            ENV=$(echo "$after_subfolder" | cut -d'/' -f1)
-            REGION=$(echo "$after_subfolder" | cut -d'/' -f2)
+            ENV=$(echo "$sub" | cut -d'/' -f1)
+            REGION=$(echo "$sub" | cut -d'/' -f2)
 
             if [ -z "$ENV" ] || [ -z "$REGION" ]; then
               echo "Could not parse ENV or REGION from path: $f. Skipping."
               continue
             fi
-
-            FILE="${checkout_repo}/$f"
-
-            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${f}"
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
+        
+            HELM_FILE="${checkout_repo}/$f"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$HELM_FILE" "$ENV" "$REGION" "helm"
           done
         fi
-
-        echo "Completed Slack notifications."

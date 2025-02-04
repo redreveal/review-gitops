@@ -13,7 +13,13 @@ ARGO_URLS = {
     },
     "prod": {
         "us-east-1": "https://argocd.us-east-1.revealglobal.cloud/",
-        "eu-west-1": "https://argocd.eu-west-1.revealglobal.cloud/"
+        "ap-south-1": "https://argocd.eu-west-1.revealglobal.cloud/",
+        "ap-southeast-2": "https://argocd.ap-southeast-2.revealglobal.cloud/",
+        "ca-central-1": "https://argocd.ca-central-1.revealglobal.cloud/",
+        "eu-central-1": "https://argocd.eu-central-1.revealglobal.cloud/",
+        "eu-west-1": "https://argocd.eu-west-1.revealglobal.cloud/",
+        "eu-west-2": "https://argocd.eu-west-2.revealglobal.cloud/",
+        "me-central-1" "https://argocd.me-central-1.revealglobal.cloud/"
     }
 }
 
@@ -34,7 +40,6 @@ def post_to_slack(slack_webhook, message):
         print("Slack message posted successfully.")
     except requests.exceptions.RequestException as e:
         print(f"Failed to post message to Slack: {e}")
-        # Optionally: sys.exit(1)
 
 def summarize_review_versions(data, file_path):
     lines = []
@@ -96,14 +101,12 @@ def summarize_helm_values(data, file_path):
     find_images_recursively(data)
 
     def short_image_name(full_image):
-        # keep everything after the FIRST slash
         splitted = full_image.split('/', 1)
         if len(splitted) == 2:
             return splitted[1]  # e.g. "dev/automation/reveal-ai-automation"
         return full_image
 
     if found_images:
-        lines.append("Found these image:tag references:")
         for item in found_images:
             short_name = short_image_name(item["full_image"])
             lines.append(f" - {short_name}: {item['tag']}")
@@ -112,8 +115,6 @@ def summarize_helm_values(data, file_path):
 
     lines.append("```")
     return "\n".join(lines)
-
-
 
 def main():
     """
