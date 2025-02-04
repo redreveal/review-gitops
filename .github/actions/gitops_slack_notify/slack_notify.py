@@ -46,7 +46,83 @@ def post_to_slack(slack_webhook, message):
         print(f"Failed to post message to Slack: {e}")
 
 
+def summarize_review_versions(data, file_path):
+    lines = []
+    lines.append(f":bell: *Review-GitOps Update for* `{file_path}`")
+    lines.append("```")
+
+    defaults = data.get('defaults', {})
+    msas = data.get('msas', {})
+
+    lines.append("Defaults:")
+    for component, comp_data in defaults.items():
+        default_ver = comp_data.get('default', 'N/A')
+        lines.append(f" - {component} default = {default_ver}")
+
+        for svc, svc_ver in comp_data.get('services', {}).items():
+            lines.append(f"   - service {svc} = {svc_ver}")
+
+    if msas:
+        lines.append("\nMSA Overrides:")
+        for msa, override_data in msas.items():
+            lines.append(f" - MSA {msa}:")
+            for comp_name, comp_values in override_data.items():
+                lines.append(f"   - Component: {comp_name}")
+                if 'default' in comp_values:
+                    lines.append(f"     - default override = {comp_values['default']}")
+                for svc, svc_ver in comp_values.get('services', {}).items():
+                    lines.append(f"     - service {svc} = {svc_ver}")
+    else:
+        lines.append("\nNo MSA overrides found.")
+
+    lines.append("```")
+    return "\n".join(lines)
 # (Existing summarize_review_versions and summarize_helm_values functions remain unchanged.)
+
+def summarize_helm_values(data, file_path):
+    """
+    Existing single-file helm summarization (non-aggregated).
+    Searches recursively for "image" and "tag" entries.
+    """
+    lines = []
+    lines.append(f":bell: *Helm Values Update for* `{file_path}`")
+    lines.append("```")
+
+    found_images = []
+
+    def find_images_recursively(obj, path=""):
+        if isinstance(obj, dict):
+            if "image" in obj and "tag" in obj:
+                found_images.append({
+                    "path": path.strip("/") or "root",
+                    "full_image": obj["image"],
+                    "tag": obj["tag"]
+                })
+            for k, v in obj.items():
+                new_path = f"{path}/{k}"
+                find_images_recursively(v, new_path)
+        elif isinstance(obj, list):
+            for idx, item in enumerate(obj):
+                new_path = f"{path}/{idx}"
+                find_images_recursively(item, new_path)
+
+    find_images_recursively(data)
+
+    def short_image_name(full_image):
+        splitted = full_image.split('/', 1)
+        if len(splitted) == 2:
+            return splitted[1]  # e.g. "dev/automation/reveal-ai-automation"
+        return full_image
+
+    if found_images:
+        for item in found_images:
+            short_name = short_image_name(item["full_image"])
+            lines.append(f" - {short_name}: {item['tag']}")
+    else:
+        lines.append("No `image` + `tag` references found in the Helm values.")
+
+    lines.append("```")
+    return "\n".join(lines)
 
 ### NEW: Functions for Aggregated Helm Mode
 
@@ -201,7 +277,7 @@ def main():
             base_file = base_file.replace(workspace + os.sep, "")
 
         # Aggregate the version data.
-        aggregated = aggregate_helm_values(file_paths)
+        aggregated = aggregate_helm_values_with_nested(file_paths)
 
         # Determine environment and region from the first file path using the new logic.
         parts = file_paths[0].split(os.sep)
