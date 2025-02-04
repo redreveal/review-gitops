@@ -3,7 +3,7 @@ defaults:
   processing:
     default: 2024.7.20
   review:
-    default: 2024.7.33
+    default: 2024.7.34
     services:
       search: 2024.7.32
       search_new: 2024.7.1
