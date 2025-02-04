@@ -68,6 +68,14 @@ runs:
             echo "Empty helm_changed_files.json. Skipping Slack notifications for Helm."
             exit 0
           fi
+        
+          if [ -d "revealai-gitops" ]; then
+                  checkout_repo="revealai-gitops"
+              elif [ -d "brainspace-gitops" ]; then
+                  checkout_repo="brainspace-gitops"
+              else
+                  checkout_repo="${GITHUB_REPOSITORY#*/}"
+              fi        
 
           for f in $changed_files; do
             # Determine repository type based on path
@@ -88,9 +96,11 @@ runs:
               echo "Could not parse ENV or REGION from path: $f. Skipping."
               continue
             fi
+        
+            FILE="${checkout_repo}/$f"
 
             echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${f}"
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$f" "$ENV" "$REGION" "helm"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
           done
         fi
 
