@@ -4,7 +4,7 @@ description: "Handle Slack notifications for both review-gitops (region_envs.jso
 inputs:
   slack_webhook:
     description: "Slack Webhook URL"
-    required: false  # can be optional if you want to skip Slack sometimes
+    required: false
 
 runs:
   using: "composite"
@@ -51,6 +51,7 @@ runs:
               echo "File $FILE not found, skipping $ENV/$REGION"
             fi
           done
+
         else
           echo "No review-gitops/regions_envs.json found => Proceeding with RevealAI-GitOps Helm Slack notifications."
 
@@ -64,42 +65,43 @@ runs:
             echo "Empty helm_changed_files.json. Skipping Slack notifications for Helm."
             exit 0
           fi
-        
+
           for f in $changed_files; do
-          # Dynamically search for the file anywhere under the workspace that ends with $f.
-          FILE=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f" -print -quit)
-          if [ -z "$FILE" ]; then
-            echo "File $f not found in any subfolder. Skipping."
-            continue
-          fi
+            # Dynamically search for the file anywhere under the workspace that ends with $f.
+            FILE=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f" -print -quit)
+            if [ -z "$FILE" ]; then
+              echo "File $f not found in any subfolder. Skipping."
+              continue
+            fi
 
-          # Make the file path relative to the workspace.
-          FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
-          echo "Found file: $FILE_REL"
+            # Make the file path relative to the workspace.
+            FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
+            echo "Found file: $FILE_REL"
 
-          # Remove the checkout folder (the first segment) so we work with the repo-internal structure.
-          relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
-          echo "Relative file path: $relative_path"
+            # Remove the checkout folder (the first segment) so we work with the repo-internal structure.
+            relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
+            echo "Relative file path: $relative_path"
 
-          # Dynamically extract ENV and REGION by splitting the relative path.
-          IFS='/' read -r seg1 seg2 seg3 seg4 <<< "$relative_path"
-          if [ -n "$seg3" ]; then
-            # Assume pattern: <prefix>/<env>/<region>/values.yaml
-            ENV="$seg2"
-            REGION="$seg3"
-          else
-            # Assume pattern: <env>/<region>/values.yaml
-            ENV="$seg1"
-            REGION="$seg2"
-          fi
+            # Dynamically extract ENV and REGION by splitting the relative path.
+            IFS='/' read -r seg1 seg2 seg3 seg4 <<< "$relative_path"
+            if [ -n "$seg3" ]; then
+              # Assume pattern: <prefix>/<env>/<region>/values.yaml
+              ENV="$seg2"
+              REGION="$seg3"
+            else
+              # Assume pattern: <env>/<region>/values.yaml
+              ENV="$seg1"
+              REGION="$seg2"
+            fi
 
-          if [ -z "$ENV" ] || [ -z "$REGION" ]; then
-            echo "Could not parse ENV or REGION from path: $f. Skipping."
-            continue
-          fi
+            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
+              echo "Could not parse ENV or REGION from path: $f. Skipping."
+              continue
+            fi
 
-          echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${FILE}"
-          python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
-        done
+            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${FILE}"
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
+          done
 
-        echo "Completed Slack notifications."
+          echo "Completed Slack notifications."
+        fi
