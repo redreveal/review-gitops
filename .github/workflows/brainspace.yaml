@@ -80,7 +80,7 @@ jobs:
             fs.writeFileSync('helm_changed_files.json', JSON.stringify(helmFiles));
 
       - name: Slack Notify Summaries
-        uses: ./revealai-gitops/.github/actions/gitops_slack_notify
+        uses: ./brainspace-gitops/.github/actions/gitops_slack_notify
         with:
           env_type: 'dev'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
