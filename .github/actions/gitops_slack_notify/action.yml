@@ -44,46 +44,50 @@ runs:
           fi
     
           for f in $changed_files; do
-            # Find all files ending with the changed file path.
+            # Find all candidates for the changed file.
             candidate_file=$(find "$GITHUB_WORKSPACE" -type f -path "*/$f")
             FILE=""
             for candidate in $candidate_file; do
-              # Remove workspace prefix.
+              # Remove the workspace prefix.
               rel=${candidate#"$GITHUB_WORKSPACE/"}
-              # Remove checkout folder (first segment).
+              # Remove the checkout folder (first segment).
               rel_no_prefix=$(echo "$rel" | cut -d'/' -f2-)
               if [ "$rel_no_prefix" = "$f" ]; then
                 FILE="$candidate"
                 break
               fi
             done
-    
+          
             if [ -z "$FILE" ]; then
               echo "File $f not found in the expected location. Skipping."
               continue
             fi
-    
+          
             echo "Found file: $FILE"
-            # Extract ENV and REGION as before:
+          
+            # Trim the absolute path to a repo-internal path.
             FILE_REL=${FILE#"$GITHUB_WORKSPACE/"}
+            # Remove the checkout folder (the first segment)
             relative_path=$(echo "$FILE_REL" | cut -d'/' -f2-)
-            IFS='/' read -r seg1 seg2 seg3 seg4 <<< "$relative_path"
-            if [ -n "$seg3" ]; then
-              ENV="$seg2"
-              REGION="$seg3"
+            echo "Relative file path: $relative_path"
+          
+            # Split the relative path into segments.
+            IFS='/' read -r -a segments <<< "$relative_path"
+            if [ ${#segments[@]} -eq 3 ]; then
+              # Pattern: <env>/<region>/values.yaml (e.g. brainspace)
+              ENV="${segments[0]}"
+              REGION="${segments[1]}"
+            elif [ ${#segments[@]} -ge 4 ]; then
+              # Pattern: <prefix>/<env>/<region>/values.yaml (e.g. RAI or RAI-bootstrap)
+              ENV="${segments[1]}"
+              REGION="${segments[2]}"
             else
-              ENV="$seg1"
-              REGION="$seg2"
-            fi
-    
-            if [ -z "$ENV" ] || [ -z "$REGION" ]; then
-              echo "Could not parse ENV or REGION from path: $f. Skipping."
+              echo "Unexpected file path format: $relative_path. Skipping."
               continue
             fi
-    
-            echo "Sending Slack notification for Helm: ENV=${ENV}, REGION=${REGION}, FILE=${FILE}"
-            python "$GITHUB_ACTION_PATH/slack_notify.py" "$FILE" "$ENV" "$REGION" "helm"
+          
+            echo "Using ENV=${ENV} and REGION=${REGION}"
+          
+            # Now pass the trimmed, relative path (rather than the full absolute file path) to the Python script.
+            python "$GITHUB_ACTION_PATH/slack_notify.py" "$relative_path" "$ENV" "$REGION" "helm"
           done
-    
-          echo "Completed Slack notifications."
-        fi
