@@ -91,3 +91,6 @@ runs:
             # Now pass the trimmed, relative path (rather than the full absolute file path) to the Python script.
             python "$GITHUB_ACTION_PATH/slack_notify.py" "$relative_path" "$ENV" "$REGION" "helm"
           done
+
+          echo "Completed Slack notifications."
+        fi
