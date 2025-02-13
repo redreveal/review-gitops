@@ -3,7 +3,7 @@ name: Push Values to ArgoCD GitOps Repo
 description: Handle MSA processing, run Python scripts, and verify Helm templates
 inputs:
   env_type:
-    description: 'Environment type (prod, dev, uat)'
+    description: 'Environment type (prod, dev, uat, gov)'
     required: true
   github_token:
     description: 'GitHub token for pushing changes'
@@ -43,7 +43,7 @@ runs:
             if (file.filename.startsWith('${{ inputs.env_type }}/')) {
               let env = `${{ inputs.env_type }}`;
               let region = file.filename.split('/')[1];
-              regions_envs.push({ region, env, branch: env === 'prod' ? 'production' : env === 'dev' ? 'develop' : 'uat' });
+              regions_envs.push({ region, env, branch: (env === 'prod' || env === 'gov') ? 'production' : env === 'dev' ? 'develop' : 'uat' });
             }
           });
 

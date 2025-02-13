@@ -6,6 +6,7 @@ on:
       - 'dev/**'
       - 'prod/**'
       - 'uat/**'
+      - 'gov/**'
 
 jobs:
   determine-environment:
@@ -14,6 +15,7 @@ jobs:
       dev_changed: ${{ steps.determine-environment.outputs.dev_changed }}
       uat_changed: ${{ steps.determine-environment.outputs.uat_changed }}
       prod_changed: ${{ steps.determine-environment.outputs.prod_changed }}
+      gov_changed: ${{ steps.determine-environment.outputs.gov_changed }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -102,4 +104,31 @@ jobs:
         uses: ./.github/actions/gitops_slack_notify
         with:
           env_type: 'uat'
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
+  push_gov_values_to_argocd:
+    needs: determine-environment
+    if: needs.determine-environment.outputs.gov_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: gov
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Setup Repositories
+        uses: ./.github/actions/setup
+        with:
+          repo_token: ${{ secrets.TOKEN }}
+
+      - name: Push Gov Values to ArgoCD
+        uses: ./.github/actions/push_values_to_argocd_gitops_repo
+        with:
+          env_type: 'gov'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Slack Notify Summaries
+        uses: ./.github/actions/gitops_slack_notify
+        with:
+          env_type: 'gov'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
