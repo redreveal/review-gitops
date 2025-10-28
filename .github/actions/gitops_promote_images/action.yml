@@ -23,14 +23,14 @@ runs:
           exit 0
         fi
 
-        # NOTE the 'e' subcommand
-        NEW_DEF=$(yq e -r ".defaults[\"$FAMILY\"].default // \"\"" "$FILE")
-        NEW_MSAS=$(yq e -o=json '.msas // {}' "$FILE")
+        # yq 4.6.1: use `e`/`eval`, and `-j` then jq -r for raw scalars
+        NEW_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r .)
+        NEW_MSAS=$(yq e -j '.msas // {}' "$FILE")
 
         if git show HEAD^:"$FILE" >/dev/null 2>&1; then
           git show HEAD^:"$FILE" > /tmp/prev.yaml
-          OLD_DEF=$(yq e -r ".defaults[\"$FAMILY\"].default // \"\"" /tmp/prev.yaml)
-          OLD_MSAS=$(yq e -o=json '.msas // {}' /tmp/prev.yaml)
+          OLD_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" /tmp/prev.yaml | jq -r .)
+          OLD_MSAS=$(yq e -j '.msas // {}' /tmp/prev.yaml)
         else
           OLD_DEF=""
           OLD_MSAS="{}"
@@ -38,10 +38,16 @@ runs:
 
         TMP=/tmp/tags.txt
         : > "$TMP"
-        [ -n "$NEW_DEF" ] && [ "$NEW_DEF" != "$OLD_DEF" ] && echo "$NEW_DEF" >> "$TMP"
+
+        # default changed?
+        if [ -n "$NEW_DEF" ] && [ "$NEW_DEF" != "$OLD_DEF" ]; then
+          echo "$NEW_DEF" >> "$TMP"
+        fi
 
         # union of MSA keys in new/old
-        ALL_MSAS=$(jq -r '([keys[]] + (input | keys[])) | unique[]' <(echo "$NEW_MSAS") <(echo "$OLD_MSAS") || true)
+        ALL_MSAS=$(jq -r '([keys[]] + (input | keys[])) | unique[]' \
+          <(echo "$NEW_MSAS") <(echo "$OLD_MSAS") || true)
+
         for msa in $ALL_MSAS; do
           N=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$NEW_MSAS")
           O=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$OLD_MSAS")
