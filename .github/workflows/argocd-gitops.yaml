@@ -99,6 +99,19 @@ jobs:
         with:
           env_file: uat/eu-west-1/versions.yaml
           family: review
+      - name: Debug collector outputs
+        shell: bash
+        run: |
+          echo "---- DEBUG: Show env_file basics ----"
+          head -n 80 uat/eu-west-1/versions.yaml || true
+          echo "---- DEBUG: yq reads ----"
+          echo "defaults.review.default:"
+          yq e -j '.defaults.review.default // ""' uat/eu-west-1/versions.yaml | jq -r .
+          echo "msas review defaults (non-empty only):"
+          yq e -j '.msas // {}' uat/eu-west-1/versions.yaml | jq -r '[to_entries[] | (.value.review.default // "")] | map(select(. != "")) | .[]?'
+          echo "---- DEBUG: step outputs ----"
+          echo "tags_json='${{ steps.collect.outputs.tags_json }}'"
+          printf 'tags_lines<<EOL\n%s\nEOL\n' "${{ steps.collect.outputs.tags_lines }}"
 
   promote_review_tags_sequential:
     needs: [ determine-environment, collect_uat_review_tags ]
