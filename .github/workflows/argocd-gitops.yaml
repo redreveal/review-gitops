@@ -85,6 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tags_json: ${{ steps.collect.outputs.tags_json }}
+      tags_lines: ${{ steps.collect.outputs.tags_lines }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 2 }
@@ -100,19 +101,17 @@ jobs:
           family: review
 
   promote_review_tags_sequential:
-    needs: collect_uat_review_tags
-    if: needs.determine-environment.outputs.uat_changed == 'true' && needs.collect_uat_review_tags.outputs.tags_json != '[]'
+    needs: [ determine-environment, collect_uat_review_tags ]
+    if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        image_tag: ${{ fromJson(needs.collect_uat_review_tags.outputs.tags_json) }}
+        image_tag: ${{ fromJson((needs.collect_uat_review_tags.outputs.tags_json != '' && needs.collect_uat_review_tags.outputs.tags_json) || '[]') }}
     steps:
-      - name: Just echo the tag (dry run)
-        # could also be `run: |` with more commands
-        run: echo "image_tag ${{ matrix.image_tag }}"
-
+      - name: Echo the Tag
+        run: echo "image tag ${{ matrix.image_tag }}"
 
   push_uat_values_to_argocd:
     needs: [determine-environment, collect_uat_review_tags, promote_review_tags_sequential]
