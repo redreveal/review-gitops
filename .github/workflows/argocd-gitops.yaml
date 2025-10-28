@@ -102,7 +102,7 @@ jobs:
 
   promote_review_tags_sequential:
     name: Promote ${{ matrix.image_tag }} to UAT
-    needs: [ determine-environment, collect_uat_review_tags ]
+    needs: [ determine-environment, collect_tags_for_promotion ]
     if: needs.determine-environment.outputs.uat_changed == 'true'
     environment: uat
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
 
 
   push_uat_values_to_argocd:
-    needs: [determine-environment, collect_uat_review_tags, promote_review_tags_sequential]
+    needs: [determine-environment, collect_tags_for_promotion, promote_review_tags_sequential]
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     environment: uat
