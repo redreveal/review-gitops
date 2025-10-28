@@ -1,17 +1,15 @@
-name: Collect family default + MSA tags (simple, yq v4.6.1)
+name: Collect family default + MSA tags (simple, yq 4.6.1-safe)
 description: Read defaults.<family>.default and all msas.*.<family>.default as a unique tag list
 inputs:
   env_file:
-    description: 'Path to versions.yaml (e.g., uat/eu-west-1/versions.yaml)'
     required: true
   family:
-    description: 'Family key (e.g., review)'
     required: true
 outputs:
   tags_lines:
-    description: 'Newline-separated list of tags (safe for simple loops)'
+    description: 'Newline-separated list of tags'
   tags_json:
-    description: 'JSON array of tags (for matrix if desired)'
+    description: 'JSON array of tags'
 runs:
   using: "composite"
   steps:
@@ -23,51 +21,51 @@ runs:
         FAMILY="${{ inputs.family }}"
 
         if [ ! -f "$FILE" ]; then
+          delim="EOF_${RANDOM}_$(date +%s%N)"
           {
-            echo "tags_lines<<__EOF__"
-            echo
-            echo "__EOF__"
+            echo "tags_lines<<$delim"
+            # intentionally empty
+            echo "$delim"
           } >> "$GITHUB_OUTPUT"
           echo 'tags_json=[]' >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
-        # yq 4.6.1: use eval (-j to JSON) + jq for scalars
-        DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs)
+        # yq 4.6.1: use eval + -j; for scalar use jq -r to unwrap
+        DEF="$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs || true)"
+        MSAS_JSON="$(yq e -j '.msas // {}' "$FILE" | tr -d '\r' || echo '{}')"
 
-        MSAS_JSON=$(yq e -j '.msas // {}' "$FILE")
-        # Extract all msas.*.<family>.default values (if present)
-        MSA_TAGS=$(jq -r --arg f "$FAMILY" '
-          [ to_entries[]
-            | (.value[$f].default // "")
-          ]
-          | map(select(. != ""))
-          | .[]
-        ' <<< "$MSAS_JSON" 2>/dev/null || true)
+        # Pull all msas.*.<family>.default non-empty strings
+        MSA_TAGS="$(jq -r --arg f "$FAMILY" '
+          [ to_entries[] | (.value[$f].default // "") ] 
+          | map(select(. != "")) | .[]
+        ' <<< "$MSAS_JSON" 2>/dev/null || true)"
 
-        TMP=/tmp/tags.$$
+        # Build a temp list, dedupe, strip empties
+        TMP="$(mktemp)"
         : > "$TMP"
-        [ -n "$DEF" ] && echo "$DEF" >> "$TMP"
+        [ -n "${DEF:-}" ] && printf '%s\n' "$DEF" >> "$TMP"
         if [ -n "${MSA_TAGS:-}" ]; then
-          # shellcheck disable=SC2129
           while IFS= read -r t; do
-            [ -n "$t" ] && echo "$t" >> "$TMP"
+            [ -n "$t" ] && printf '%s\n' "$t" >> "$TMP"
           done <<< "$MSA_TAGS"
         fi
 
+        DEDUP="$(mktemp)"
         if [ -s "$TMP" ]; then
-          sort -u "$TMP" | sed 's/\r$//' > /tmp/tags_uniq.$$
+          sort -u "$TMP" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$DEDUP"
         else
-          : > /tmp/tags_uniq.$$
+          : > "$DEDUP"
         fi
 
-        # Output newline-separated list safely via heredoc (no format errors)
+        # Output 1: newline-separated tags via a CLEAN heredoc (no indent, no quotes/commas)
+        delim="EOF_${RANDOM}_$(date +%s%N)"
         {
-          echo "tags_lines<<__EOF__"
-          cat /tmp/tags_uniq.$$
-          echo "__EOF__"
+          echo "tags_lines<<$delim"
+          cat "$DEDUP"
+          echo "$delim"
         } >> "$GITHUB_OUTPUT"
 
-        # Also provide JSON array (correctly formatted)
-        TAGS_JSON=$(awk 'NF{print}' /tmp/tags_uniq.$$ | jq -R . | jq -s .)
-        echo "tags_json=$TAGS_JSON" >> "$GITHUB_OUTPUT"
+        # Output 2: compact JSON array on ONE line (prevents file-command parse issues)
+        TAGS_JSON="$(awk 'NF{print}' "$DEDUP" | jq -R . | jq -cs .)"
+        echo "tags_json=${TAGS_JSON}" >> "$GITHUB_OUTPUT"
