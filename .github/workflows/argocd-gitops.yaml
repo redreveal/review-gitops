@@ -108,9 +108,21 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        image_tag: ${{ fromJson((needs.collect_uat_review_tags.outputs.tags_json != '' && needs.collect_uat_review_tags.outputs.tags_json) || '[]') }}
+        image_tag: ${{ fromJson(
+          (
+          needs.collect_uat_review_tags.outputs.tags_json != '' &&
+          needs.collect_uat_review_tags.outputs.tags_json != '[]' &&
+          needs.collect_uat_review_tags.outputs.tags_json
+          ) || '["__NO_TAGS__"]'
+          ) }}
     steps:
+      - name: Debug tags_json
+        run: echo 'tags_json=${{ needs.collect_uat_review_tags.outputs.tags_json }}'
+      - name: Nothing to promote (skip)
+        if: matrix.image_tag == '__NO_TAGS__'
+        run: echo "No tags to promote"
       - name: Echo the Tag
+        if: matrix.image_tag != '__NO_TAGS__'
         run: echo "image tag ${{ matrix.image_tag }}"
 
   push_uat_values_to_argocd:
