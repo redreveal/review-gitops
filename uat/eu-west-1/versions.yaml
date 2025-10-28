@@ -12,13 +12,16 @@ defaults:
 msas:
   92510000:
     review:
+      default: 2024.7.18
       services:
         search: 2024.7.12
   92510001:
     review:
+      default: 2024.7.17
       services:
         search: 2024.7.16
   92510002:
     review:
+      default: 2024.7.17
       services:
         search: 2024.7.17
