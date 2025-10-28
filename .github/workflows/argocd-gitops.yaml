@@ -123,20 +123,26 @@ jobs:
       matrix:
         image_tag: ${{ fromJson(
           (
-          needs.collect_uat_review_tags.outputs.tags_json != '' &&
-          needs.collect_uat_review_tags.outputs.tags_json != '[]' &&
-          needs.collect_uat_review_tags.outputs.tags_json
+          needs.collect_uat_review_tags.outputs.msa_tags_json != '' &&
+          needs.collect_uat_review_tags.outputs.msa_tags_json != '[]' &&
+          needs.collect_uat_review_tags.outputs.msa_tags_json
           ) || '["__NO_TAGS__"]'
-          ) }}
+         ) }}
     steps:
-      - name: Debug tags_json
-        run: echo 'tags_json=${{ needs.collect_uat_review_tags.outputs.tags_json }}'
+      - name: Debug
+        run: |
+          echo "default_tag='${{ needs.collect_uat_review_tags.outputs.default_tag }}'"
+          echo "msa_tags_json='${{ needs.collect_uat_review_tags.outputs.msa_tags_json }}'"
+          echo "matrix.image_tag='${{ matrix.image_tag }}'"
+
       - name: Nothing to promote (skip)
         if: matrix.image_tag == '__NO_TAGS__'
-        run: echo "No tags to promote"
-      - name: Echo the Tag
+        run: echo "No MSA override tags to promote."
+
+      - name: Echo the Tag (real work goes here)
         if: matrix.image_tag != '__NO_TAGS__'
         run: echo "image tag ${{ matrix.image_tag }}"
+
 
   push_uat_values_to_argocd:
     needs: [determine-environment, collect_uat_review_tags, promote_review_tags_sequential]

@@ -1,16 +1,25 @@
-name: Collect family default + MSA tags (simple, yq 4.6.1-safe)
-description: Read defaults.<family>.default and all msas.*.<family>.default as a unique tag list
+name: Collect family default + MSA tags (yq 4.6.1)
+description: Read defaults.<family>.default and all msas.*.<family>.default
 inputs:
   env_file:
     required: true
   family:
     required: true
 outputs:
+  default_tag:
+    description: 'defaults.<family>.default tag'
+    value: ${{ steps.collect.outputs.default_tag }}
+  msa_tags_lines:
+    description: 'MSA override tags, newline-separated'
+    value: ${{ steps.collect.outputs.msa_tags_lines }}
+  msa_tags_json:
+    description: 'MSA override tags, JSON array'
+    value: ${{ steps.collect.outputs.msa_tags_json }}
   tags_lines:
-    description: 'Newline-separated list of tags'
+    description: 'All tags (default + MSA), newline-separated'
     value: ${{ steps.collect.outputs.tags_lines }}
   tags_json:
-    description: 'JSON array of tags'
+    description: 'All tags (default + MSA), JSON array'
     value: ${{ steps.collect.outputs.tags_json }}
 runs:
   using: "composite"
@@ -22,53 +31,69 @@ runs:
         FILE="${{ inputs.env_file }}"
         FAMILY="${{ inputs.family }}"
 
-        if [ ! -f "$FILE" ]; then
-          delim="EOF_${RANDOM}_$(date +%s%N)"
-          {
-            echo "tags_lines<<$delim"
-            # intentionally empty
-            echo "$delim"
-          } >> "$GITHUB_OUTPUT"
-          echo 'tags_json=[]' >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        # yq 4.6.1: use eval + -j; for scalar use jq -r to unwrap
+        # Read default
         DEF="$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs || true)"
-        MSAS_JSON="$(yq e -j '.msas // {}' "$FILE" | tr -d '\r' || echo '{}')"
 
-        # Pull all msas.*.<family>.default non-empty strings
+        # Read MSA defaults
+        MSAS_JSON="$(yq e -j '.msas // {}' "$FILE" | tr -d '\r' || echo '{}')"
         MSA_TAGS="$(jq -r --arg f "$FAMILY" '
-          [ to_entries[] | (.value[$f].default // "") ] 
-          | map(select(. != "")) | .[]
+          [to_entries[] | (.value[$f].default // "")] | map(select(. != "")) | .[]
         ' <<< "$MSAS_JSON" 2>/dev/null || true)"
 
-        # Build a temp list, dedupe, strip empties
-        TMP="$(mktemp)"
-        : > "$TMP"
-        [ -n "${DEF:-}" ] && printf '%s\n' "$DEF" >> "$TMP"
+        # Build full list (default + MSA), dedupe
+        TMP="$(mktemp)"; : > "$TMP"
+        [ -n "$DEF" ] && printf '%s\n' "$DEF" >> "$TMP"
         if [ -n "${MSA_TAGS:-}" ]; then
           while IFS= read -r t; do
             [ -n "$t" ] && printf '%s\n' "$t" >> "$TMP"
           done <<< "$MSA_TAGS"
         fi
 
-        DEDUP="$(mktemp)"
+        DEDUP_ALL="$(mktemp)"
         if [ -s "$TMP" ]; then
-          sort -u "$TMP" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$DEDUP"
+          sort -u "$TMP" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$DEDUP_ALL"
         else
-          : > "$DEDUP"
+          : > "$DEDUP_ALL"
         fi
 
-        # Output 1: newline-separated tags via a CLEAN heredoc (no indent, no quotes/commas)
-        delim="EOF_${RANDOM}_$(date +%s%N)"
+        # JSON (all)
+        ALL_JSON="$(awk 'NF{print}' "$DEDUP_ALL" | jq -R . | jq -cs .)"
+        [ -z "$ALL_JSON" ] && ALL_JSON="[]"
+
+        # Filtered MSA-only (remove DEF if present)
+        if [ -n "$DEF" ]; then
+          MSA_JSON="$(jq --arg def "$DEF" 'map(select(. != $def))' <<< "$ALL_JSON")"
+        else
+          MSA_JSON="$ALL_JSON"
+        fi
+
+        # Lines (MSA-only)
+        DEDUP_MSA="$(mktemp)"
+        if [ -n "$DEF" ]; then
+          grep -vx -- "$DEF" "$DEDUP_ALL" > "$DEDUP_MSA" || : 
+        else
+          cp "$DEDUP_ALL" "$DEDUP_MSA"
+        fi
+
+        # Outputs
+        echo "default_tag=$DEF" >> "$GITHUB_OUTPUT"
+
+        # msa_tags_lines (heredoc)
+        delim_msa="EOF_MSA_${RANDOM}_$(date +%s%N)"
         {
-          echo "tags_lines<<$delim"
-          cat "$DEDUP"
-          echo "$delim"
+          echo "msa_tags_lines<<$delim_msa"
+          cat "$DEDUP_MSA"
+          echo "$delim_msa"
         } >> "$GITHUB_OUTPUT"
 
-        # Output 2: compact JSON array on ONE line (prevents file-command parse issues)
-        TAGS_JSON="$(awk 'NF{print}' "$DEDUP" | jq -R . | jq -cs .)"
-        [ -z "$TAGS_JSON" ] && TAGS_JSON="[]"
-        echo "tags_json=${TAGS_JSON}" >> "$GITHUB_OUTPUT"
+        # msa_tags_json
+        echo "msa_tags_json=${MSA_JSON}" >> "$GITHUB_OUTPUT"
+
+        # Keep the original “all tags” outputs
+        delim_all="EOF_ALL_${RANDOM}_$(date +%s%N)"
+        {
+          echo "tags_lines<<$delim_all"
+          cat "$DEDUP_ALL"
+          echo "$delim_all"
+        } >> "$GITHUB_OUTPUT"
+        echo "tags_json=${ALL_JSON}" >> "$GITHUB_OUTPUT"
