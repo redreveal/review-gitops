@@ -8,8 +8,10 @@ inputs:
 outputs:
   tags_lines:
     description: 'Newline-separated list of tags'
+    value: ${{ steps.collect.outputs.tags_lines }}
   tags_json:
     description: 'JSON array of tags'
+    value: ${{ steps.collect.outputs.tags_json }}
 runs:
   using: "composite"
   steps:
@@ -68,4 +70,5 @@ runs:
 
         # Output 2: compact JSON array on ONE line (prevents file-command parse issues)
         TAGS_JSON="$(awk 'NF{print}' "$DEDUP" | jq -R . | jq -cs .)"
+        [ -z "$TAGS_JSON" ] && TAGS_JSON="[]"
         echo "tags_json=${TAGS_JSON}" >> "$GITHUB_OUTPUT"
