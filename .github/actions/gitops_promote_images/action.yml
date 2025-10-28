@@ -1,5 +1,5 @@
-name: Collect component MSA override versions (yq 4.6.1)
-description: Reads defaults.<component>.default and msas.*.<component>.default, returns MSA-only versions as JSON
+name: Collect changed MSA override versions (yq 4.6.1)
+description: Returns only changed msas.*.<component>.default values vs previous commit (as a JSON array of strings)
 inputs:
   env_file:
     required: true
@@ -9,7 +9,7 @@ inputs:
     description: 'Component key (e.g., review, processing, reveal_ai)'
 outputs:
   msa_tags_json:
-    description: 'MSA override versions (JSON array of strings)'
+    description: 'Changed MSA override versions (JSON array of strings)'
     value: ${{ steps.collect.outputs.msa_tags_json }}
 runs:
   using: "composite"
@@ -19,46 +19,69 @@ runs:
       run: |
         set -euo pipefail
         file="${{ inputs.env_file }}"
-        comp="${{ inputs.component }}"
+        component="${{ inputs.component }}"
 
-        # Read the global default for the component
-        default_version="$(yq e -j ".defaults[\"$comp\"].default // \"\"" "$file" \
-          | jq -r . | tr -d '\r' | xargs || true)"
-
-        # Read msas block as JSON
-        msas_json="$(yq e -j '.msas // {}' "$file" | tr -d '\r' || echo '{}')"
-
-        # Pull all msas.*.<component>.default values (one per MSA), non-empty
-        msa_versions_raw="$(jq -r --arg c "$comp" '
-          [ to_entries[] | (.value[$c].default // "") ]
-          | map(select(. != "")) | .[]
-        ' <<< "$msas_json" 2>/dev/null || true)"
-
-        # Build a newline list with default + MSA versions, then dedupe
-        all_versions_file="$(mktemp)"; : > "$all_versions_file"
-        [ -n "$default_version" ] && printf '%s\n' "$default_version" >> "$all_versions_file"
-        if [ -n "${msa_versions_raw:-}" ]; then
-          while IFS= read -r v; do
-            [ -n "$v" ] && printf '%s\n' "$v" >> "$all_versions_file"
-          done <<< "$msa_versions_raw"
-        fi
-
-        unique_all_versions="$(mktemp)"; : > "$unique_all_versions"
-        if [ -s "$all_versions_file" ]; then
-          sort -u "$all_versions_file" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$unique_all_versions"
-        fi
-
-        # Convert to JSON array of strings (quoted)
-        all_json="$(awk 'NF{print}' "$unique_all_versions" | jq -R . | jq -cs .)"
-        [ -z "$all_json" ] && all_json='[]'
-        all_json_compact="$(jq -c . <<<"$all_json")"
-
-        # Remove the global default from the list to get MSA-only versions
-        if [ -n "$default_version" ]; then
-          msa_json_compact="$(jq -c --arg def "$default_version" 'map(select(. != $def))' <<<"$all_json_compact")"
+        # Ensure we can compare to previous commit of this file (caller should use fetch-depth: 2)
+        prev_file="$(mktemp)"
+        if git show "HEAD^:${file}" >"$prev_file" 2>/dev/null; then
+          has_prev=1
         else
-          msa_json_compact="$all_json_compact"
+          has_prev=0
         fi
 
-        # Single-line output (safe for $GITHUB_OUTPUT)
-        printf 'msa_tags_json=%s\n' "$msa_json_compact" >> "$GITHUB_OUTPUT"
+        # Read current msas block as JSON
+        current_msas_json="$(yq e -j '.msas // {}' "$file" | tr -d '\r' || echo '{}')"
+        # Extract current msas.*.<component>.default (non-empty), one per line
+        current_msa_versions="$(
+          jq -r --arg c "$component" '
+            [ to_entries[] | (.value[$c].default // "") ]
+            | map(select(. != "")) | .[]
+          ' <<< "$current_msas_json" 2>/dev/null || true
+        )"
+
+        # Read previous msas (if available) and extract versions
+        if [ "$has_prev" -eq 1 ]; then
+          previous_msas_json="$(yq e -j '.msas // {}' "$prev_file" | tr -d '\r' || echo '{}')"
+          previous_msa_versions="$(
+            jq -r --arg c "$component" '
+              [ to_entries[] | (.value[$c].default // "") ]
+              | map(select(. != "")) | .[]
+            ' <<< "$previous_msas_json" 2>/dev/null || true
+          )"
+        else
+          previous_msa_versions=""
+        fi
+
+        # Build sets (unique, one per line)
+        current_set="$(mktemp)"; : > "$current_set"
+        previous_set="$(mktemp)"; : > "$previous_set"
+
+        if [ -n "${current_msa_versions:-}" ]; then
+          printf '%s\n' $current_msa_versions \
+            | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' \
+            | sort -u > "$current_set"
+        fi
+
+        if [ -n "${previous_msa_versions:-}" ]; then
+          printf '%s\n' $previous_msa_versions \
+            | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' \
+            | sort -u > "$previous_set"
+        fi
+
+        # CHANGED = current - previous (or all current if no previous)
+        changed_set="$(mktemp)"; : > "$changed_set"
+        if [ -s "$current_set" ]; then
+          if [ -s "$previous_set" ]; then
+            comm -23 "$current_set" "$previous_set" > "$changed_set"
+          else
+            cp "$current_set" "$changed_set"
+          fi
+        fi
+
+        # Emit JSON array of strings (single-line, safe for $GITHUB_OUTPUT)
+        if [ -s "$changed_set" ]; then
+          json="$(awk 'NF{print}' "$changed_set" | jq -R . | jq -cs . | jq -c .)"
+        else
+          json='[]'
+        fi
+        printf 'msa_tags_json=%s\n' "$json" >> "$GITHUB_OUTPUT"

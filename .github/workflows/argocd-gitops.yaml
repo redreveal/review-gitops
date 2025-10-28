@@ -116,7 +116,7 @@ jobs:
           ) || '["__NO_TAGS__"]'
          ) }}
     steps:
-      - name: Skip when no MSA overrides
+      - name: Skip when no changes MSA overrides
         if: matrix.image_tag == '__NO_TAGS__'
         run: echo "No MSA override tags to promote."
 
