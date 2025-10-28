@@ -94,7 +94,7 @@ jobs:
 
       - name: Collect review MSA override versions
         id: collect
-        uses: ./.github/actions/collect_component_msa_versions
+        uses: ./.github/actions/gitops_promote_images
         with:
           env_file: uat/eu-west-1/versions.yaml
           component: review
