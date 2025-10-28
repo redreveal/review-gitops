@@ -28,75 +28,58 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-
         FILE="${{ inputs.env_file }}"
         FAMILY="${{ inputs.family }}"
 
-        # 1) Read values (yq 4.6.1: use eval + -j; unwrap scalars via jq -r)
+        # 1) Read default + msas (yq 4.6.1)
         DEF="$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs || true)"
         MSAS_JSON="$(yq e -j '.msas // {}' "$FILE" | tr -d '\r' || echo '{}')"
 
-        # 2) Collect MSA override tags (non-empty)
+        # 2) Extract all msas.*.<family>.default (non-empty), as raw lines
         MSA_TAGS_RAW="$(jq -r --arg f "$FAMILY" '
           [to_entries[] | (.value[$f].default // "")] | map(select(. != "")) | .[]
         ' <<< "$MSAS_JSON" 2>/dev/null || true)"
 
-        # 3) Build deduped lists
+        # 3) Build deduped lists (newline files)
         TMP_ALL="$(mktemp)"; : > "$TMP_ALL"
         [ -n "$DEF" ] && printf '%s\n' "$DEF" >> "$TMP_ALL"
         if [ -n "${MSA_TAGS_RAW:-}" ]; then
-          while IFS= read -r t; do
-            [ -n "$t" ] && printf '%s\n' "$t" >> "$TMP_ALL"
-          done <<< "$MSA_TAGS_RAW"
+          while IFS= read -r t; do [ -n "$t" ] && printf '%s\n' "$t" >> "$TMP_ALL"; done <<< "$MSA_TAGS_RAW"
         fi
-
         DEDUP_ALL="$(mktemp)"; : > "$DEDUP_ALL"
         if [ -s "$TMP_ALL" ]; then
           sort -u "$TMP_ALL" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$DEDUP_ALL"
         fi
 
-        # 4) Build JSON arrays (COMPACT one-line)
+        # 4) Make proper JSON arrays of strings (quotes guaranteed)
+        # ALL_JSON -> ["2024.7.15","2024.7.18","2024.7.19"]
         ALL_JSON="$(awk 'NF{print}' "$DEDUP_ALL" | jq -R . | jq -cs .)"
-        [ -z "$ALL_JSON" ] && ALL_JSON="[]"
-        ALL_JSON_COMPACT="$(jq -c . <<<"$ALL_JSON" 2>/dev/null || echo '[]')"
+        [ -z "$ALL_JSON" ] && ALL_JSON='[]'
+        ALL_JSON_COMPACT="$(jq -c . <<<"$ALL_JSON")"
 
+        # MSA_JSON_COMPACT = ALL minus DEF (still quoted)
         if [ -n "$DEF" ]; then
-          MSA_JSON_COMPACT="$(jq -c --arg def "$DEF" 'map(select(. != $def))' <<<"$ALL_JSON_COMPACT" 2>/dev/null || echo '[]')"
+          MSA_JSON_COMPACT="$(jq -c --arg def "$DEF" 'map(select(. != $def))' <<<"$ALL_JSON_COMPACT")"
         else
           MSA_JSON_COMPACT="$ALL_JSON_COMPACT"
         fi
 
-        # 5) Build MSA-only lines
+        # 5) Build MSA-only lines (newline)
         DEDUP_MSA="$(mktemp)"; : > "$DEDUP_MSA"
         if [ -n "$DEF" ] && [ -s "$DEDUP_ALL" ]; then
-          # grep -v exact match; allow empty if only default exists
           grep -vx -- "$DEF" "$DEDUP_ALL" > "$DEDUP_MSA" || :
         else
           cp "$DEDUP_ALL" "$DEDUP_MSA" 2>/dev/null || :
         fi
 
-        # 6) Write outputs SAFELY
-
-        # default_tag (single line; never quote or comma)
+        # 6) Outputs (safe formats)
         echo "default_tag=${DEF}" >> "$GITHUB_OUTPUT"
 
-        # msa_tags_lines (heredoc, no indentation on delimiters)
         delim_msa="EOF_MSA_${RANDOM}_$(date +%s%N)"
-        {
-          echo "msa_tags_lines<<$delim_msa"
-          cat "$DEDUP_MSA"
-          echo "$delim_msa"
-        } >> "$GITHUB_OUTPUT"
+        { echo "msa_tags_lines<<$delim_msa"; cat "$DEDUP_MSA"; echo "$delim_msa"; } >> "$GITHUB_OUTPUT"
 
-        # msa_tags_json (single compact line)
         printf 'msa_tags_json=%s\n' "$MSA_JSON_COMPACT" >> "$GITHUB_OUTPUT"
 
-        # all tags (optional, keep if you still use them)
         delim_all="EOF_ALL_${RANDOM}_$(date +%s%N)"
-        {
-          echo "tags_lines<<$delim_all"
-          cat "$DEDUP_ALL"
-          echo "$delim_all"
-        } >> "$GITHUB_OUTPUT"
+        { echo "tags_lines<<$delim_all"; cat "$DEDUP_ALL"; echo "$delim_all"; } >> "$GITHUB_OUTPUT"
         printf 'tags_json=%s\n' "$ALL_JSON_COMPACT" >> "$GITHUB_OUTPUT"
-
