@@ -84,11 +84,7 @@ jobs:
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     outputs:
-      tags_json: ${{ steps.collect.outputs.tags_json }}
-      tags_lines: ${{ steps.collect.outputs.tags_lines }}
-      default_tag: ${{ steps.collect.outputs.default_tag }}
       msa_tags_json: ${{ steps.collect.outputs.msa_tags_json }}
-      msa_tags_lines: ${{ steps.collect.outputs.msa_tags_lines }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 2 }
@@ -96,20 +92,13 @@ jobs:
       - name: Setup Dependencies
         uses: ./.github/actions/dependencies
 
-      - name: Collect changed review tags (default + MSA)
+      - name: Collect review MSA override versions
         id: collect
-        uses: ./.github/actions/gitops_promote_images
+        uses: ./.github/actions/collect_component_msa_versions
         with:
           env_file: uat/eu-west-1/versions.yaml
-          family: review
-      - name: Debug collector outputs
-        shell: bash
-        run: |
-          echo "default_tag='${{ steps.collect.outputs.default_tag }}'"
-          echo "msa_tags_json='${{ steps.collect.outputs.msa_tags_json }}'"
-          printf 'msa_tags_lines<<EOL\n%s\nEOL\n' "${{ steps.collect.outputs.msa_tags_lines }}"
-          echo "tags_json='${{ steps.collect.outputs.tags_json }}'"
-          printf 'tags_lines<<EOL\n%s\nEOL\n' "${{ steps.collect.outputs.tags_lines }}"
+          component: review
+
 
   promote_review_tags_sequential:
     needs: [ determine-environment, collect_uat_review_tags ]
@@ -125,21 +114,16 @@ jobs:
           needs.collect_uat_review_tags.outputs.msa_tags_json != '[]' &&
           needs.collect_uat_review_tags.outputs.msa_tags_json
           ) || '["__NO_TAGS__"]'
-         ) }}
+        ) }}
     steps:
-      - name: Debug
-        run: |
-          echo "default_tag='${{ needs.collect_uat_review_tags.outputs.default_tag }}'"
-          echo "msa_tags_json='${{ needs.collect_uat_review_tags.outputs.msa_tags_json }}'"
-          echo "matrix.image_tag='${{ matrix.image_tag }}'"
-
-      - name: Nothing to promote (skip)
+      - name: Skip when no MSA overrides
         if: matrix.image_tag == '__NO_TAGS__'
         run: echo "No MSA override tags to promote."
 
-      - name: Echo the Tag (real work goes here)
+      - name: Promote (replace with your dispatch+await)
         if: matrix.image_tag != '__NO_TAGS__'
-        run: echo "image tag ${{ matrix.image_tag }}"
+        run: echo "Promote image tag ${{ matrix.image_tag }}"
+
 
 
   push_uat_values_to_argocd:

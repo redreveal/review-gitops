@@ -1,26 +1,16 @@
-name: Collect family default + MSA tags (yq 4.6.1)
-description: Read defaults.<family>.default and all msas.*.<family>.default
+name: Collect component MSA override versions (yq 4.6.1)
+description: Reads defaults.<component>.default and msas.*.<component>.default, returns MSA-only versions as JSON
 inputs:
   env_file:
     required: true
-  family:
+    description: 'Path to versions.yaml (e.g., uat/eu-west-1/versions.yaml)'
+  component:
     required: true
+    description: 'Component key (e.g., review, processing, reveal_ai)'
 outputs:
-  default_tag:
-    description: 'defaults.<family>.default tag'
-    value: ${{ steps.collect.outputs.default_tag }}
-  msa_tags_lines:
-    description: 'MSA override tags, newline-separated'
-    value: ${{ steps.collect.outputs.msa_tags_lines }}
   msa_tags_json:
-    description: 'MSA override tags, JSON array'
+    description: 'MSA override versions (JSON array of strings)'
     value: ${{ steps.collect.outputs.msa_tags_json }}
-  tags_lines:
-    description: 'All tags (default + MSA), newline-separated'
-    value: ${{ steps.collect.outputs.tags_lines }}
-  tags_json:
-    description: 'All tags (default + MSA), JSON array'
-    value: ${{ steps.collect.outputs.tags_json }}
 runs:
   using: "composite"
   steps:
@@ -28,58 +18,47 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        FILE="${{ inputs.env_file }}"
-        FAMILY="${{ inputs.family }}"
+        file="${{ inputs.env_file }}"
+        comp="${{ inputs.component }}"
 
-        # 1) Read default + msas (yq 4.6.1)
-        DEF="$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs || true)"
-        MSAS_JSON="$(yq e -j '.msas // {}' "$FILE" | tr -d '\r' || echo '{}')"
+        # Read the global default for the component
+        default_version="$(yq e -j ".defaults[\"$comp\"].default // \"\"" "$file" \
+          | jq -r . | tr -d '\r' | xargs || true)"
 
-        # 2) Extract all msas.*.<family>.default (non-empty), as raw lines
-        MSA_TAGS_RAW="$(jq -r --arg f "$FAMILY" '
-          [to_entries[] | (.value[$f].default // "")] | map(select(. != "")) | .[]
-        ' <<< "$MSAS_JSON" 2>/dev/null || true)"
+        # Read msas block as JSON
+        msas_json="$(yq e -j '.msas // {}' "$file" | tr -d '\r' || echo '{}')"
 
-        # 3) Build deduped lists (newline files)
-        TMP_ALL="$(mktemp)"; : > "$TMP_ALL"
-        [ -n "$DEF" ] && printf '%s\n' "$DEF" >> "$TMP_ALL"
-        if [ -n "${MSA_TAGS_RAW:-}" ]; then
-          while IFS= read -r t; do [ -n "$t" ] && printf '%s\n' "$t" >> "$TMP_ALL"; done <<< "$MSA_TAGS_RAW"
+        # Pull all msas.*.<component>.default values (one per MSA), non-empty
+        msa_versions_raw="$(jq -r --arg c "$comp" '
+          [ to_entries[] | (.value[$c].default // "") ]
+          | map(select(. != "")) | .[]
+        ' <<< "$msas_json" 2>/dev/null || true)"
+
+        # Build a newline list with default + MSA versions, then dedupe
+        all_versions_file="$(mktemp)"; : > "$all_versions_file"
+        [ -n "$default_version" ] && printf '%s\n' "$default_version" >> "$all_versions_file"
+        if [ -n "${msa_versions_raw:-}" ]; then
+          while IFS= read -r v; do
+            [ -n "$v" ] && printf '%s\n' "$v" >> "$all_versions_file"
+          done <<< "$msa_versions_raw"
         fi
-        DEDUP_ALL="$(mktemp)"; : > "$DEDUP_ALL"
-        if [ -s "$TMP_ALL" ]; then
-          sort -u "$TMP_ALL" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$DEDUP_ALL"
+
+        unique_all_versions="$(mktemp)"; : > "$unique_all_versions"
+        if [ -s "$all_versions_file" ]; then
+          sort -u "$all_versions_file" | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' > "$unique_all_versions"
         fi
 
-        # 4) Make proper JSON arrays of strings (quotes guaranteed)
-        # ALL_JSON -> ["2024.7.15","2024.7.18","2024.7.19"]
-        ALL_JSON="$(awk 'NF{print}' "$DEDUP_ALL" | jq -R . | jq -cs .)"
-        [ -z "$ALL_JSON" ] && ALL_JSON='[]'
-        ALL_JSON_COMPACT="$(jq -c . <<<"$ALL_JSON")"
+        # Convert to JSON array of strings (quoted)
+        all_json="$(awk 'NF{print}' "$unique_all_versions" | jq -R . | jq -cs .)"
+        [ -z "$all_json" ] && all_json='[]'
+        all_json_compact="$(jq -c . <<<"$all_json")"
 
-        # MSA_JSON_COMPACT = ALL minus DEF (still quoted)
-        if [ -n "$DEF" ]; then
-          MSA_JSON_COMPACT="$(jq -c --arg def "$DEF" 'map(select(. != $def))' <<<"$ALL_JSON_COMPACT")"
+        # Remove the global default from the list to get MSA-only versions
+        if [ -n "$default_version" ]; then
+          msa_json_compact="$(jq -c --arg def "$default_version" 'map(select(. != $def))' <<<"$all_json_compact")"
         else
-          MSA_JSON_COMPACT="$ALL_JSON_COMPACT"
+          msa_json_compact="$all_json_compact"
         fi
 
-        # 5) Build MSA-only lines (newline)
-        DEDUP_MSA="$(mktemp)"; : > "$DEDUP_MSA"
-        if [ -n "$DEF" ] && [ -s "$DEDUP_ALL" ]; then
-          grep -vx -- "$DEF" "$DEDUP_ALL" > "$DEDUP_MSA" || :
-        else
-          cp "$DEDUP_ALL" "$DEDUP_MSA" 2>/dev/null || :
-        fi
-
-        # 6) Outputs (safe formats)
-        echo "default_tag=${DEF}" >> "$GITHUB_OUTPUT"
-
-        delim_msa="EOF_MSA_${RANDOM}_$(date +%s%N)"
-        { echo "msa_tags_lines<<$delim_msa"; cat "$DEDUP_MSA"; echo "$delim_msa"; } >> "$GITHUB_OUTPUT"
-
-        printf 'msa_tags_json=%s\n' "$MSA_JSON_COMPACT" >> "$GITHUB_OUTPUT"
-
-        delim_all="EOF_ALL_${RANDOM}_$(date +%s%N)"
-        { echo "tags_lines<<$delim_all"; cat "$DEDUP_ALL"; echo "$delim_all"; } >> "$GITHUB_OUTPUT"
-        printf 'tags_json=%s\n' "$ALL_JSON_COMPACT" >> "$GITHUB_OUTPUT"
+        # Single-line output (safe for $GITHUB_OUTPUT)
+        printf 'msa_tags_json=%s\n' "$msa_json_compact" >> "$GITHUB_OUTPUT"
