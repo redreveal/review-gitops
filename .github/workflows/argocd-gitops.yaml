@@ -103,6 +103,7 @@ jobs:
   promote_review_tags_sequential:
     needs: [ determine-environment, collect_uat_review_tags ]
     if: needs.determine-environment.outputs.uat_changed == 'true'
+    environment: uat
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
