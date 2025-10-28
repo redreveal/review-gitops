@@ -1,0 +1,58 @@
+name: Collect changed family tags
+description: Diff versions.yaml and output changed tags for defaults.<family>.default and msas.*.<family>.default
+inputs:
+  env_file:
+    description: 'Path to versions.yaml (e.g., uat/eu-west-1/versions.yaml)'
+    required: true
+  family:
+    description: 'Family key (e.g., review)'
+    required: true
+outputs:
+  tags_json:
+    description: 'JSON array of unique changed tags'
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      id: collect
+      run: |
+        set -euo pipefail
+        FILE="${{ inputs.env_file }}"
+        FAMILY="${{ inputs.family }}"
+        if [ ! -f "$FILE" ]; then
+          echo "No file $FILE"
+          echo "tags_json=[]" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        NEW_DEF=$(yq -r ".defaults[\"$FAMILY\"].default // \"\"" "$FILE")
+        NEW_MSAS=$(yq -o=json '.msas // {}' "$FILE")
+
+        if git show HEAD^:"$FILE" >/dev/null 2>&1; then
+          git show HEAD^:"$FILE" > /tmp/prev.yaml
+          OLD_DEF=$(yq -r ".defaults[\"$FAMILY\"].default // \"\"" /tmp/prev.yaml)
+          OLD_MSAS=$(yq -o=json '.msas // {}' /tmp/prev.yaml)
+        else
+          OLD_DEF=""
+          OLD_MSAS="{}"
+        fi
+
+        TMP=/tmp/tags.txt
+        : > "$TMP"
+        [ -n "$NEW_DEF" ] && [ "$NEW_DEF" != "$OLD_DEF" ] && echo "$NEW_DEF" >> "$TMP"
+
+        ALL_MSAS=$(jq -r '([keys[]] + (input | keys[])) | unique[]' \
+          <(echo "$NEW_MSAS") <(echo "$OLD_MSAS") || true)
+        for msa in $ALL_MSAS; do
+          N=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$NEW_MSAS")
+          O=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$OLD_MSAS")
+          [ -n "$N" ] && [ "$N" != "$O" ] && echo "$N" >> "$TMP"
+        done
+
+        if [ -s "$TMP" ]; then
+          TAGS_JSON=$(sort -u "$TMP" | jq -R . | jq -s .)
+        else
+          TAGS_JSON="[]"
+        fi
+
+        echo "tags_json=$TAGS_JSON" >> "$GITHUB_OUTPUT"

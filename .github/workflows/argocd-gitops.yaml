@@ -79,8 +79,43 @@ jobs:
           env_type: 'dev'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
-  push_uat_values_to_argocd:
+  collect_uat_review_tags:
     needs: determine-environment
+    if: needs.determine-environment.outputs.uat_changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tags_json: ${{ steps.collect.outputs.tags_json }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - name: Setup Dependencies
+        uses: ./.github/actions/dependencies
+
+      - name: Collect changed review tags (default + MSA)
+        id: collect
+        uses: ./.github/actions/gitops_promote_images
+        with:
+          env_file: uat/eu-west-1/versions.yaml
+          family: review
+
+  promote_review_tags_sequential:
+    needs: collect_uat_review_tags
+    if: needs.determine-environment.outputs.uat_changed == 'true' && needs.collect_uat_review_tags.outputs.tags_json != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        image_tag: ${{ fromJson(needs.collect_uat_review_tags.outputs.tags_json) }}
+    steps:
+      - name: Just echo the tag (dry run)
+        # could also be `run: |` with more commands
+        run: echo "image_tag ${{ matrix.image_tag }}"
+
+
+  push_uat_values_to_argocd:
+    needs: [determine-environment, collect_uat_review_tags, promote_review_tags_sequential]
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
     environment: uat
