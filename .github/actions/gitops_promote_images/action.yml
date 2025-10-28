@@ -15,18 +15,18 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        FILE="${{ inputs.env_file }}"
-        FAMILY="${{ inputs.family }}"
-
+        FILE="uat/eu-west-1/versions.yaml"
+        FAMILY="review"
+    
         if [ ! -f "$FILE" ]; then
           echo "tags_json=[]" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-
-        # yq 4.6.1: use `e`/`eval`, and `-j` then jq -r for raw scalars
+    
+        # yq 4.6.1: use `e` and emit JSON with -j; for scalars pipe to jq -r .
         NEW_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r .)
         NEW_MSAS=$(yq e -j '.msas // {}' "$FILE")
-
+    
         if git show HEAD^:"$FILE" >/dev/null 2>&1; then
           git show HEAD^:"$FILE" > /tmp/prev.yaml
           OLD_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" /tmp/prev.yaml | jq -r .)
@@ -35,29 +35,33 @@ runs:
           OLD_DEF=""
           OLD_MSAS="{}"
         fi
-
+    
         TMP=/tmp/tags.txt
         : > "$TMP"
-
+    
         # default changed?
         if [ -n "$NEW_DEF" ] && [ "$NEW_DEF" != "$OLD_DEF" ]; then
           echo "$NEW_DEF" >> "$TMP"
         fi
-
-        # union of MSA keys in new/old
-        ALL_MSAS=$(jq -r '([keys[]] + (input | keys[])) | unique[]' \
-          <(echo "$NEW_MSAS") <(echo "$OLD_MSAS") || true)
-
+    
+        # union of MSA keys (robust)
+        ALL_MSAS=$(
+          jq -r -n \
+            --argjson new "$NEW_MSAS" \
+            --argjson old "$OLD_MSAS" \
+            '($new | keys) + ($old | keys) | unique | .[]'
+        )
+    
         for msa in $ALL_MSAS; do
           N=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$NEW_MSAS")
           O=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$OLD_MSAS")
           [ -n "$N" ] && [ "$N" != "$O" ] && echo "$N" >> "$TMP"
         done
-
+    
         if [ -s "$TMP" ]; then
           TAGS_JSON=$(sort -u "$TMP" | jq -R . | jq -s .)
         else
           TAGS_JSON="[]"
         fi
-
+    
         echo "tags_json=$TAGS_JSON" >> "$GITHUB_OUTPUT"
