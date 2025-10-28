@@ -1,13 +1,17 @@
-name: Collect changed family tags
-description: Diff versions.yaml and output changed tags for defaults.<family>.default and msas.*.<family>.default
+name: Collect family default + MSA tags (simple, yq v4.6.1)
+description: Read defaults.<family>.default and all msas.*.<family>.default as a unique tag list
 inputs:
   env_file:
+    description: 'Path to versions.yaml (e.g., uat/eu-west-1/versions.yaml)'
     required: true
   family:
+    description: 'Family key (e.g., review)'
     required: true
 outputs:
+  tags_lines:
+    description: 'Newline-separated list of tags (safe for simple loops)'
   tags_json:
-    description: 'JSON array of unique changed tags'
+    description: 'JSON array of tags (for matrix if desired)'
 runs:
   using: "composite"
   steps:
@@ -15,53 +19,55 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        FILE="uat/eu-west-1/versions.yaml"
-        FAMILY="review"
-    
+        FILE="${{ inputs.env_file }}"
+        FAMILY="${{ inputs.family }}"
+
         if [ ! -f "$FILE" ]; then
-          echo "tags_json=[]" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags_lines<<__EOF__"
+            echo
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo 'tags_json=[]' >> "$GITHUB_OUTPUT"
           exit 0
         fi
-    
-        # yq 4.6.1: use `e` and emit JSON with -j; for scalars pipe to jq -r .
-        NEW_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r .)
-        NEW_MSAS=$(yq e -j '.msas // {}' "$FILE")
-    
-        if git show HEAD^:"$FILE" >/dev/null 2>&1; then
-          git show HEAD^:"$FILE" > /tmp/prev.yaml
-          OLD_DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" /tmp/prev.yaml | jq -r .)
-          OLD_MSAS=$(yq e -j '.msas // {}' /tmp/prev.yaml)
-        else
-          OLD_DEF=""
-          OLD_MSAS="{}"
-        fi
-    
-        TMP=/tmp/tags.txt
+
+        # yq 4.6.1: use eval (-j to JSON) + jq for scalars
+        DEF=$(yq e -j ".defaults[\"$FAMILY\"].default // \"\"" "$FILE" | jq -r . | tr -d '\r' | xargs)
+
+        MSAS_JSON=$(yq e -j '.msas // {}' "$FILE")
+        # Extract all msas.*.<family>.default values (if present)
+        MSA_TAGS=$(jq -r --arg f "$FAMILY" '
+          [ to_entries[]
+            | (.value[$f].default // "")
+          ]
+          | map(select(. != ""))
+          | .[]
+        ' <<< "$MSAS_JSON" 2>/dev/null || true)
+
+        TMP=/tmp/tags.$$
         : > "$TMP"
-    
-        # default changed?
-        if [ -n "$NEW_DEF" ] && [ "$NEW_DEF" != "$OLD_DEF" ]; then
-          echo "$NEW_DEF" >> "$TMP"
+        [ -n "$DEF" ] && echo "$DEF" >> "$TMP"
+        if [ -n "${MSA_TAGS:-}" ]; then
+          # shellcheck disable=SC2129
+          while IFS= read -r t; do
+            [ -n "$t" ] && echo "$t" >> "$TMP"
+          done <<< "$MSA_TAGS"
         fi
-    
-        # union of MSA keys (robust)
-        ALL_MSAS=$(
-          jq -r -n \
-            --argjson new "$NEW_MSAS" \
-            --argjson old "$OLD_MSAS" \
-            '($new | keys) + ($old | keys) | unique | .[]'
-        )
-    
-        for msa in $ALL_MSAS; do
-          N=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$NEW_MSAS")
-          O=$(jq -r --arg msa "$msa" --arg f "$FAMILY" '.[$msa][$f].default // ""' <<<"$OLD_MSAS")
-          [ -n "$N" ] && [ "$N" != "$O" ] && echo "$N" >> "$TMP"
-        done
-    
+
         if [ -s "$TMP" ]; then
-          TAGS_JSON=$(sort -u "$TMP" | jq -R . | jq -s .)
+          sort -u "$TMP" | sed 's/\r$//' > /tmp/tags_uniq.$$
         else
-          TAGS_JSON="[]"
+          : > /tmp/tags_uniq.$$
         fi
-    
+
+        # Output newline-separated list safely via heredoc (no format errors)
+        {
+          echo "tags_lines<<__EOF__"
+          cat /tmp/tags_uniq.$$
+          echo "__EOF__"
+        } >> "$GITHUB_OUTPUT"
+
+        # Also provide JSON array (correctly formatted)
+        TAGS_JSON=$(awk 'NF{print}' /tmp/tags_uniq.$$ | jq -R . | jq -s .)
         echo "tags_json=$TAGS_JSON" >> "$GITHUB_OUTPUT"
