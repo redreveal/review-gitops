@@ -114,7 +114,7 @@ jobs:
           needs.collect_uat_review_tags.outputs.msa_tags_json != '[]' &&
           needs.collect_uat_review_tags.outputs.msa_tags_json
           ) || '["__NO_TAGS__"]'
-        ) }}
+         ) }}
     steps:
       - name: Skip when no MSA overrides
         if: matrix.image_tag == '__NO_TAGS__'
@@ -123,7 +123,9 @@ jobs:
       - name: Promote (replace with your dispatch+await)
         if: matrix.image_tag != '__NO_TAGS__'
         run: echo "Promote image tag ${{ matrix.image_tag }}"
-
+        # later:
+        # uses: PureDiscovery/return-dispatch@main
+        # uses: PureDiscovery/await-remote-run@main
 
 
   push_uat_values_to_argocd:
