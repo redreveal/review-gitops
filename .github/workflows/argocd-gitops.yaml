@@ -79,7 +79,7 @@ jobs:
           env_type: 'dev'
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
 
-  collect_uat_review_tags:
+  collect_tags_for_promotion:
     needs: determine-environment
     if: needs.determine-environment.outputs.uat_changed == 'true'
     runs-on: ubuntu-latest
@@ -101,6 +101,7 @@ jobs:
 
 
   promote_review_tags_sequential:
+    name: Promote ${{ matrix.image_tag }} to UAT
     needs: [ determine-environment, collect_uat_review_tags ]
     if: needs.determine-environment.outputs.uat_changed == 'true'
     environment: uat
