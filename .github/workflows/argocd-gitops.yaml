@@ -112,9 +112,9 @@ jobs:
       matrix:
         image_tag: ${{ fromJson(
           (
-          needs.collect_uat_review_tags.outputs.msa_tags_json != '' &&
-          needs.collect_uat_review_tags.outputs.msa_tags_json != '[]' &&
-          needs.collect_uat_review_tags.outputs.msa_tags_json
+          needs.collect_tags_for_promotion.outputs.msa_tags_json != '' &&
+          needs.collect_tags_for_promotion.outputs.msa_tags_json != '[]' &&
+          needs.collect_tags_for_promotion.outputs.msa_tags_json
           ) || '["__NO_TAGS__"]'
          ) }}
     steps:
