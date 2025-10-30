@@ -20,8 +20,8 @@ runs:
         set -euo pipefail
         file="${{ inputs.env_file }}"
         component="${{ inputs.component }}"
-
-        # Ensure we can compare to previous commit of this file (caller should use fetch-depth: 2)
+        
+        # We compare current vs previous commit of the same versions.yaml.
         prev_file="$(mktemp)"
         if git show "HEAD^:${file}" >"$prev_file" 2>/dev/null; then
           has_prev=1
@@ -29,9 +29,12 @@ runs:
           has_prev=0
         fi
 
-        # Read current msas block as JSON
+        # --- CURRENT (global default + MSA overrides) ---
+        current_default="$(
+          yq e -j ".defaults[\"$component\"].default // \"\"" "$file" \
+          | jq -r . | tr -d '\r' | xargs || true
+        )"
         current_msas_json="$(yq e -j '.msas // {}' "$file" | tr -d '\r' || echo '{}')"
-        # Extract current msas.*.<component>.default (non-empty), one per line
         current_msa_versions="$(
           jq -r --arg c "$component" '
             [ to_entries[] | (.value[$c].default // "") ]
@@ -39,8 +42,12 @@ runs:
           ' <<< "$current_msas_json" 2>/dev/null || true
         )"
 
-        # Read previous msas (if available) and extract versions
+        # --- PREVIOUS (global default + MSA overrides) ---
         if [ "$has_prev" -eq 1 ]; then
+          previous_default="$(
+            yq e -j ".defaults[\"$component\"].default // \"\"" "$prev_file" \
+            | jq -r . | tr -d '\r' | xargs || true
+          )"
           previous_msas_json="$(yq e -j '.msas // {}' "$prev_file" | tr -d '\r' || echo '{}')"
           previous_msa_versions="$(
             jq -r --arg c "$component" '
@@ -49,23 +56,32 @@ runs:
             ' <<< "$previous_msas_json" 2>/dev/null || true
           )"
         else
+          previous_default=""
           previous_msa_versions=""
         fi
 
-        # Build sets (unique, one per line)
+        # Build unique sets (one tag per line)
         current_set="$(mktemp)"; : > "$current_set"
         previous_set="$(mktemp)"; : > "$previous_set"
 
+        # current: add global default (if any) + all MSA defaults
+        if [ -n "$current_default" ]; then printf '%s\n' "$current_default" >> "$current_set"; fi
         if [ -n "${current_msa_versions:-}" ]; then
-          printf '%s\n' $current_msa_versions \
-            | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' \
-            | sort -u > "$current_set"
+          printf '%s\n' $current_msa_versions >> "$current_set"
+        fi
+        if [ -s "$current_set" ]; then
+          sed -e 's/\r$//' -e '/^[[:space:]]*$/d' "$current_set" | sort -u > "${current_set}.u"
+          mv "${current_set}.u" "$current_set"
         fi
 
+        # previous: add global default (if any) + all MSA defaults
+        if [ -n "$previous_default" ]; then printf '%s\n' "$previous_default" >> "$previous_set"; fi
         if [ -n "${previous_msa_versions:-}" ]; then
-          printf '%s\n' $previous_msa_versions \
-            | sed -e 's/\r$//' -e '/^[[:space:]]*$/d' \
-            | sort -u > "$previous_set"
+          printf '%s\n' $previous_msa_versions >> "$previous_set"
+        fi
+        if [ -s "$previous_set" ]; then
+          sed -e 's/\r$//' -e '/^[[:space:]]*$/d' "$previous_set" | sort -u > "${previous_set}.u"
+          mv "${previous_set}.u" "$previous_set"
         fi
 
         # CHANGED = current - previous (or all current if no previous)
@@ -78,7 +94,7 @@ runs:
           fi
         fi
 
-        # Emit JSON array of strings (single-line, safe for $GITHUB_OUTPUT)
+        # Emit JSON array of strings; sentinel when empty to keep downstream jobs running
         if [ -s "$changed_set" ]; then
           json="$(awk 'NF{print}' "$changed_set" | jq -R . | jq -cs . | jq -c .)"
         else
