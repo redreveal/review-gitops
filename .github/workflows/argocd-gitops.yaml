@@ -113,11 +113,17 @@ jobs:
         image_tag: ${{ fromJson(needs.collect_tags_for_promotion.outputs.msa_tags_json) }}
     steps:
 
-      - name: Skip when no changes MSA overrides
+      - name: Skip when no tags to promote
         if: matrix.image_tag == '__NO_TAGS__'
-        run: echo "No MSA override tags to promote."
+        run: |
+          echo "No image tag to promote, skipping job."
+          exit 0
 
       - name: Promote (replace with your dispatch+await)
+        if: matrix.image_tag != '__NO_TAGS__'
+        run: echo "Promote image tag ${{ matrix.image_tag }}"
+
+      - name: Promote 2 (replace with your dispatch+await)
         if: matrix.image_tag != '__NO_TAGS__'
         run: echo "Promote image tag ${{ matrix.image_tag }}"
         # later:
