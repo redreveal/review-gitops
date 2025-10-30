@@ -3,7 +3,7 @@ defaults:
   processing:
     default: 2024.7.20
   review:
-    default: 2024.7.15
+    default: 2024.7.16
     services:
       search: 2024.7.32
       search_new: 2024.7.1
@@ -22,11 +22,6 @@ msas:
         search: 2024.7.16
   92510002:
     review:
-      default: 2024.7.29
-      services:
-        search: 2024.7.17
-  92510003:
-    review:
-      default: 2024.7.29
+      default: 2024.7.30
       services:
         search: 2024.7.17
