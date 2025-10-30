@@ -112,12 +112,13 @@ jobs:
       matrix:
         image_tag: ${{ fromJson(needs.collect_tags_for_promotion.outputs.msa_tags_json) }}
     steps:
+
       - name: Skip when no changes MSA overrides
-        if: matrix.image_tag == '__NO_TAGS__'
-        run: echo "No MSA override tags to promote."
+        if: matrix.image_tag = ''
+        run: echo "No MSA override tags to promote." && exit 78
 
       - name: Promote (replace with your dispatch+await)
-        if: matrix.image_tag != '__NO_TAGS__'
+        if: matrix.image_tag != ''
         run: echo "Promote image tag ${{ matrix.image_tag }}"
         # later:
         # uses: PureDiscovery/return-dispatch@main
