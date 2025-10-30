@@ -114,7 +114,7 @@ jobs:
     steps:
 
       - name: Skip when no changes MSA overrides
-        if: matrix.image_tag = ''
+        if: matrix.image_tag == ''
         run: echo "No MSA override tags to promote." && exit 78
 
       - name: Promote (replace with your dispatch+await)
