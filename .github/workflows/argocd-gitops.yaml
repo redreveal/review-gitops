@@ -115,7 +115,7 @@ jobs:
 
       - name: Skip when no changes MSA overrides
         if: matrix.image_tag == '__NO_TAGS__'
-        run: echo "No MSA override tags to promote." && exit 78
+        run: echo "No MSA override tags to promote."
 
       - name: Promote (replace with your dispatch+await)
         if: matrix.image_tag != '__NO_TAGS__'
