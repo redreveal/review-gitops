@@ -22,7 +22,7 @@ msas:
         search: 2024.7.16
   92510002:
     review:
-      default: 2024.7.30
+      default: 2024.7.31
       services:
         search: 2024.7.17
   92510003:
